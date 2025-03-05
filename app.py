@@ -295,33 +295,31 @@ def failure_analysis_tab(df):
         st.plotly_chart(fig_top_cases)
 
     # Add heatmap for Automation and Manual issues
-    st.subheader("🔥 Automation vs Manual Issues Heatmap")
+    st.subheader("🔥 Failure Distribution by Day and Issue Type")
     
     # Create heatmap data
-    issue_types = ['Automation', 'Manual']
+    issue_types = sorted(df[df['Execution Status'] == 'Fail']['Defect Type'].unique())
     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     
+    df['DayOfWeek'] = df['Execution Date'].dt.day_name()
     heatmap_data = []
     
     for issue_type in issue_types:
         for day in days:
-            count = len(df[
+            # Get failed test cases for this day and issue type
+            failed_tests = df[
                 (df['Execution Status'] == 'Fail') & 
                 (df['Defect Type'] == issue_type) & 
                 (df['DayOfWeek'] == day)
-            ])
-            test_cases = df[
-                (df['Execution Status'] == 'Fail') & 
-                (df['Defect Type'] == issue_type) & 
-                (df['DayOfWeek'] == day)
-            ]['Test Case Name'].unique()
-            test_cases_str = '<br>'.join(test_cases[:3]) + ('...' if len(test_cases) > 3 else '')
+            ]
+            count = len(failed_tests)
+            test_cases = '<br>'.join(failed_tests['Test Case Name'].unique())
             
             heatmap_data.append({
                 'Issue Type': issue_type,
                 'Day': day,
                 'Count': count,
-                'Test Cases': test_cases_str
+                'Test Cases': test_cases
             })
     
     heatmap_df = pd.DataFrame(heatmap_data)
@@ -335,7 +333,7 @@ def failure_analysis_tab(df):
         index='Issue Type',
         columns='Day',
         values='Test Cases'
-    )
+    ).fillna('')
     
     fig_heatmap = go.Figure(data=go.Heatmap(
         z=heatmap_pivot.values,
@@ -346,11 +344,11 @@ def failure_analysis_tab(df):
         texttemplate="%{text}",
         textfont={"size": 12},
         hoverongaps=False,
-        customdata=test_cases_pivot.values,
         hovertemplate="<b>Issue Type:</b> %{y}<br>" +
                      "<b>Day:</b> %{x}<br>" +
                      "<b>Count:</b> %{z}<br>" +
-                     "<b>Test Cases:</b><br>%{customdata}<extra></extra>"
+                     "<b>Failed Test Cases:</b><br>%{customdata}<extra></extra>",
+        customdata=test_cases_pivot.values
     ))
     
     fig_heatmap.update_layout(
@@ -368,33 +366,28 @@ def failure_analysis_tab(df):
     # Get failed test cases and their issue types
     failed_tests = df[df['Execution Status'] == 'Fail']
     
-    # Extract issue type from Defect Description
-    def extract_issue_type(desc):
-        if pd.isna(desc):
-            return 'Unknown'
-        if 'Environment Issue' in desc:
-            return 'Environment'
-        elif 'Test Data Issue' in desc:
-            return 'Test Data'
-        elif 'Requirement Gap' in desc:
-            return 'Requirement'
-        elif 'Code Issue' in desc:
-            return 'Code'
-        else:
-            return 'Other'
-    
-    failed_tests['Issue Type'] = failed_tests['Defect Description'].apply(extract_issue_type)
-    
     # Create pivot table for test cases vs issue types
     test_issue_pivot = pd.crosstab(
-        failed_tests['Test Case ID'],
-        failed_tests['Issue Type']
+        failed_tests['Test Case Name'],
+        failed_tests['Defect Type']
     )
     
     # Sort test cases by total failures
     test_issue_pivot['Total'] = test_issue_pivot.sum(axis=1)
     test_issue_pivot = test_issue_pivot.sort_values('Total', ascending=False).head(15)  # Show top 15 test cases
     test_issue_pivot = test_issue_pivot.drop('Total', axis=1)
+    
+    # Get defect descriptions for hover data
+    defect_desc_pivot = pd.pivot_table(
+        failed_tests,
+        index='Test Case Name',
+        columns='Defect Type',
+        values='Defect Description',
+        aggfunc=lambda x: '<br>'.join(x.unique())
+    ).fillna('')
+    
+    # Filter to match test_issue_pivot
+    defect_desc_pivot = defect_desc_pivot.loc[test_issue_pivot.index]
     
     fig_test_issues = go.Figure(data=go.Heatmap(
         z=test_issue_pivot.values,
@@ -405,13 +398,17 @@ def failure_analysis_tab(df):
         texttemplate="%{text}",
         textfont={"size": 12},
         hoverongaps=False,
-        hovertemplate="Test Case: %{y}<br>Issue Type: %{x}<br>Count: %{z}<extra></extra>"
+        hovertemplate="<b>Test Case:</b> %{y}<br>" +
+                     "<b>Issue Type:</b> %{x}<br>" +
+                     "<b>Count:</b> %{z}<br>" +
+                     "<b>Defect Details:</b><br>%{customdata}<extra></extra>",
+        customdata=defect_desc_pivot.values
     ))
     
     fig_test_issues.update_layout(
         title='Top 15 Failing Test Cases by Issue Type',
         xaxis_title='Issue Type',
-        yaxis_title='Test Case ID',
+        yaxis_title='Test Case Name',
         template='plotly_white',
         height=600,  # Make it taller to accommodate more test cases
         xaxis={'tickangle': -45}  # Angle the x-axis labels for better readability
@@ -424,52 +421,88 @@ def failure_analysis_tab(df):
         st.subheader("🤖 AI Analysis")
         
         # Get detailed failure patterns
-        weekend_failures = df[
+        automation_issues = df[
             (df['Execution Status'] == 'Fail') & 
-            (df['IsWeekend'])
-        ].groupby(['Defect Type', 'Defect Description']).size().nlargest(5)
+            (df['Defect Type'].str.contains('Data|Environment', na=False))
+        ].groupby(['Test Case Name', 'Defect Description', 'DayOfWeek']).size().nlargest(5)
         
-        weekday_failures = df[
+        manual_issues = df[
             (df['Execution Status'] == 'Fail') & 
-            (~df['IsWeekend'])
-        ].groupby(['Defect Type', 'Defect Description']).size().nlargest(5)
+            (df['Defect Type'].str.contains('UI|Functional', na=False))
+        ].groupby(['Test Case Name', 'Defect Description', 'DayOfWeek']).size().nlargest(5)
         
-        # Standardized analysis template
-        analysis_template = f"""
-        ## Executive Summary
+        # Get LOB-wise failure distribution
+        lob_failures = df[df['Execution Status'] == 'Fail'].groupby('LOB').size()
+        most_affected_lob = lob_failures.idxmax()
         
-        ### Critical Metrics
-        - Total Test Cases Analyzed: {len(df)}
-        - Overall Failure Rate: {(len(df[df['Execution Status'] == 'Fail']) / len(df) * 100):.1f}%
-        - Most Affected Module: M&R
-        - Primary Issue Types: Environment, Test Data, Code, and Requirement Issues
+        # Get defect type distribution
+        defect_type_dist = df[df['Execution Status'] == 'Fail'].groupby('Defect Type').size()
+        
+        # Calculate test case stability
+        test_stability = df.groupby('Test Case Name').agg({
+            'Execution Status': lambda x: (x == 'Pass').mean() * 100
+        }).sort_values('Execution Status')
+        
+        # Get defect status distribution
+        defect_status_dist = df[df['Execution Status'] == 'Fail'].groupby('Defect Status').size()
+        
+        analysis_prompt = f"""
+        Based on the actual test execution data, provide a detailed analysis:
 
-        ### Key Findings
-
-        #### 1. Environment Issues
-        ```
-        🔍 High-Priority Test Cases:
-        - Weekend Environment Issues: {len(df[(df['Execution Status'] == 'Fail') & (df['IsWeekend']) & (df['Defect Type'] == 'Environment')])} occurrences
-        - Weekday Environment Issues: {len(df[(df['Execution Status'] == 'Fail') & (~df['IsWeekend']) & (df['Defect Type'] == 'Environment')])} occurrences
+        Test Execution Summary:
+        - Total Test Cases: {len(df)}
+        - Failed Test Cases: {len(df[df['Execution Status'] == 'Fail'])}
+        - Most Affected LOB: {most_affected_lob}
         
-        📊 Pattern Analysis:
-        - Weekend Environment Issues: {(len(df[(df['Execution Status'] == 'Fail') & (df['IsWeekend']) & (df['Defect Type'] == 'Environment')]) / len(df[(df['Execution Status'] == 'Fail') & (df['IsWeekend'])]) * 100):.1f}% of weekend failures
-        - Configuration Drift: {(len(df[(df['Execution Status'] == 'Fail') & (df['Defect Type'] == 'Environment') & (df['Defect Description'].str.contains('configuration', case=False, na=False))]) / len(df[df['Execution Status'] == 'Fail']) * 100):.1f}% of failures
-        - Resource Management: {(len(df[(df['Execution Status'] == 'Fail') & (df['Defect Type'] == 'Environment') & (df['Defect Description'].str.contains('resource', case=False, na=False))]) / len(df[df['Execution Status'] == 'Fail']) * 100):.1f}% of failures
-        ```
-
-        #### 2. Test Data Issues
-        ```
-        🔍 High-Priority Test Cases:
-        {weekday_failures.head(3).to_string()}
+        Defect Distribution:
+        {defect_type_dist.to_string()}
         
-        📊 Pattern Analysis:
-        - Data Sync Issues: {len(df[df['Defect Description'].str.contains('Sync|Synchronization', na=False, regex=True)])} occurrences
-        - State Management: {len(df[df['Defect Description'].str.contains('State|Data State', na=False, regex=True)])} occurrences
-        ```
+        Top 5 Most Critical Issues:
+        {automation_issues.to_string()}
+        
+        Top 5 UI/Functional Issues:
+        {manual_issues.to_string()}
+        
+        Defect Status Overview:
+        {defect_status_dist.to_string()}
+        
+        Least Stable Test Cases (Bottom 5):
+        {test_stability.head().to_string()}
+
+        Please provide:
+        1. Critical Issue Analysis
+           - Identify patterns in the most frequent failures
+           - Analyze root causes based on defect descriptions
+           - Assess impact on different LOBs
+        
+        2. Test Case Stability Assessment
+           - Evaluate patterns in unstable test cases
+           - Identify common factors in failing scenarios
+           - Suggest improvements for test reliability
+        
+        3. Defect Management Insights
+           - Analyze defect resolution patterns
+           - Identify bottlenecks in defect lifecycle
+           - Recommend process improvements
+        
+        4. Risk Assessment
+           - Evaluate impact on business functionality
+           - Identify high-risk areas needing immediate attention
+           - Suggest preventive measures
+        
+        5. Actionable Recommendations
+           - Specific steps for improving test stability
+           - Process improvements for defect management
+           - Test case enhancement suggestions
+           - Resource allocation recommendations
+        
+        Focus on providing data-driven insights and specific, actionable recommendations based on the actual test results.
         """
         
-        st.markdown(analysis_template)
+        with st.spinner("Generating comprehensive analysis..."):
+            ai_insights = get_ai_analysis(analysis_prompt)
+            if ai_insights:
+                st.markdown(ai_insights)
 
 def trend_analysis_tab(df):
     """Tab 2: Failure Trends Over Time"""
@@ -584,64 +617,101 @@ def trend_analysis_tab(df):
     if st.session_state.ai_analysis:
         st.subheader("🤖 AI Trend Analysis")
         
-        # Calculate trend metrics with test case details
+        # Calculate trend metrics
         total_failures = len(filtered_df[filtered_df['Execution Status'] == 'Fail'])
-        failure_by_type = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby('Defect Type').agg({
-            'Test Case ID': 'count',
-            'Test Case Name': lambda x: list(x.unique())
-        })
+        failure_by_type = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby('Defect Type').size()
         
-        # Get top recurring defects with test names
+        # Get top recurring defects with test case names
         recurring_defects = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby(
-            ['Test Case ID', 'Test Case Name', 'Defect Description', 'Defect Type']
+            ['Test Case Name', 'Defect Type', 'Defect Description']
         ).size().nlargest(5)
         
-        # Calculate weekly patterns with test details
+        # Calculate weekly patterns with test case details
         weekly_stats = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby(
-            ['DayOfWeek', 'Test Case ID', 'Test Case Name', 'Defect Type']
+            ['DayOfWeek', 'Test Case Name', 'Defect Type', 'Defect Description']
         ).size().nlargest(5)
         
-        # Get recent trend (last 7 days) with test names
+        # Get recent trend (last 7 days) with test case details
         recent_trend = filtered_df[
             filtered_df['Execution Date'] >= filtered_df['Execution Date'].max() - pd.Timedelta(days=7)
         ]
         recent_failures = recent_trend[recent_trend['Execution Status'] == 'Fail'].groupby(
-            ['Execution Date', 'Test Case ID', 'Test Case Name', 'Defect Type']
-        ).size().nlargest(5)
+            ['Execution Date', 'Test Case Name', 'Defect Type', 'Defect Description']
+        ).size()
         
-        # Format the analysis template
-        analysis_template = f"""
-        ### Trend Analysis Summary
+        # Calculate failure rate trends
+        daily_failure_rates = filtered_df.groupby('Execution Date').agg({
+            'Execution Status': lambda x: (x == 'Fail').mean() * 100
+        }).sort_index()
         
-        #### Overall Statistics
-        - Total Failures in Selected Period: {total_failures}
-        - Average Daily Failure Rate: {total_failures / len(filtered_df['Execution Date'].unique()):.2f}
+        # Calculate trend direction
+        trend_direction = 'increasing' if daily_failure_rates['Execution Status'].iloc[-1] > daily_failure_rates['Execution Status'].iloc[0] else 'decreasing'
         
-        #### Top Recurring Test Cases
-        ```
-        Most Frequently Failing Test Cases:
+        analysis_prompt = f"""
+        Based on the actual test execution data for the selected period, provide a detailed trend analysis:
+
+        Overall Trend Summary:
+        - Total Failures: {total_failures}
+        - Trend Direction: {trend_direction}
+        - Latest Failure Rate: {daily_failure_rates['Execution Status'].iloc[-1]:.1f}%
+        
+        Failure Distribution by Type:
+        {failure_by_type.to_string()}
+        
+        Top 5 Most Recurring Issues:
         {recurring_defects.to_string()}
-        ```
         
-        #### Weekly Pattern Analysis
-        ```
-        Most Common Day-wise Failures:
+        Critical Weekly Patterns:
         {weekly_stats.to_string()}
-        ```
         
-        #### Recent Trend (Last 7 Days)
-        ```
-        Recent Test Case Failures:
+        Recent 7-Day Trend:
         {recent_failures.to_string()}
-        ```
         
-        #### Recommendations
-        1. Focus on test cases with highest failure frequency
-        2. Investigate patterns in day-wise failures
-        3. Address recent failures to prevent recurring issues
+        Please provide:
+        1. Trend Pattern Analysis
+           - Analyze the overall failure rate trend
+           - Identify specific test cases showing deteriorating performance
+           - Highlight any cyclical patterns in failures
+           - Correlate failures with specific days/times
+        
+        2. Defect Evolution Analysis
+           - Track how defect patterns have changed over time
+           - Identify persistent vs. newly emerging issues
+           - Analyze defect resolution velocity
+           - Highlight recurring patterns in specific test cases
+        
+        3. Impact Assessment
+           - Evaluate the business impact of identified trends
+           - Analyze the effectiveness of recent fixes
+           - Identify areas showing improvement vs. degradation
+           - Assess the stability of critical test cases
+        
+        4. Root Cause Analysis
+           - Identify common factors in recurring failures
+           - Analyze environmental or timing-related patterns
+           - Evaluate test data dependencies
+           - Assess infrastructure-related trends
+        
+        5. Predictive Insights
+           - Forecast potential future issues based on trends
+           - Identify test cases at risk of failure
+           - Suggest preventive measures
+           - Recommend monitoring focus areas
+        
+        6. Actionable Recommendations
+           - Specific steps to address deteriorating trends
+           - Test case improvement suggestions
+           - Process enhancement recommendations
+           - Resource allocation guidance
+        
+        Focus on providing data-driven insights and specific, actionable recommendations based on the actual trend data.
+        Highlight any patterns that require immediate attention and suggest proactive measures to prevent future failures.
         """
         
-        st.markdown(analysis_template)
+        with st.spinner("Generating trend analysis..."):
+            ai_insights = get_ai_analysis(analysis_prompt)
+            if ai_insights:
+                st.markdown(ai_insights)
 
 def gap_analysis_tab(df):
     """Tab 3: Gap Analysis"""
@@ -747,74 +817,107 @@ def gap_analysis_tab(df):
     if st.session_state.ai_analysis:
         st.subheader("🤖 AI Gap Analysis")
         
-        # Calculate test coverage metrics with names
-        test_coverage = df.groupby(['LOB', 'Test Case ID', 'Test Case Name']).size().reset_index(name='execution_count')
+        # Calculate test coverage metrics with test case names
+        test_coverage = df.groupby(['LOB', 'Test Case Name']).size().reset_index(name='execution_count')
         lob_coverage = test_coverage.groupby('LOB').agg({
-            'Test Case ID': 'count',
-            'execution_count': 'sum',
-            'Test Case Name': lambda x: list(x)
+            'Test Case Name': 'count',
+            'execution_count': 'sum'
         }).reset_index()
         
-        # Calculate defect patterns with test details
+        # Calculate defect patterns with test case details
         defect_patterns = df[df['Execution Status'] == 'Fail'].groupby(
-            ['LOB', 'Defect Type', 'Test Case ID', 'Test Case Name']
-        ).size().reset_index(name='failure_count')
-        top_patterns = defect_patterns.nlargest(10, 'failure_count')
+            ['LOB', 'Test Case Name', 'Defect Type', 'Defect Description']
+        ).size().reset_index(name='count')
+        defect_patterns = defect_patterns.sort_values('count', ascending=False).head(10)
         
         # Identify test cases with high failure rates
-        tc_failure_rates = df.groupby(['Test Case ID', 'Test Case Name']).agg({
-            'Execution Status': lambda x: (x == 'Fail').mean() * 100
+        tc_failure_rates = df.groupby(['Test Case Name', 'LOB']).agg({
+            'Execution Status': lambda x: (x == 'Fail').mean() * 100,
+            'Defect Type': lambda x: list(x[x != ''].unique()),
+            'Defect Description': lambda x: list(x[x != ''].unique())
         }).reset_index()
         high_risk_tcs = tc_failure_rates[tc_failure_rates['Execution Status'] > 50].head(5)
         
-        # Get uncovered scenarios
+        # Get uncovered scenarios (test cases with no recent executions)
         recent_date = df['Execution Date'].max() - pd.Timedelta(days=30)
-        recent_executions = df[df['Execution Date'] > recent_date][['Test Case ID', 'Test Case Name']].drop_duplicates()
-        all_test_cases = df[['Test Case ID', 'Test Case Name']].drop_duplicates()
-        uncovered_tcs = pd.merge(
-            all_test_cases,
-            recent_executions,
-            on=['Test Case ID', 'Test Case Name'],
-            how='left',
-            indicator=True
-        )
-        uncovered_tcs = uncovered_tcs[uncovered_tcs['_merge'] == 'left_only'].drop('_merge', axis=1)
+        recent_executions = df[df['Execution Date'] > recent_date]['Test Case Name'].unique()
+        all_test_cases = df['Test Case Name'].unique()
+        uncovered_tcs = set(all_test_cases) - set(recent_executions)
         
-        # Format the analysis template
-        analysis_template = f"""
-        ### Gap Analysis Summary
+        # Calculate defect resolution metrics
+        defect_resolution = df[df['Execution Status'] == 'Fail'].groupby(['LOB', 'Defect Status']).size().unstack(fill_value=0)
+        resolution_rate = (defect_resolution['Closed'] / defect_resolution.sum(axis=1) * 100).round(2)
         
-        #### Test Coverage by LOB
-        ```
-        {lob_coverage.to_string(index=False)}
-        ```
+        analysis_prompt = f"""
+        Based on the actual test execution data, provide a comprehensive gap analysis:
+
+        Test Coverage Overview:
+        {lob_coverage.to_string()}
         
-        #### Top Defect Patterns
-        ```
-        Most Common Failure Patterns:
-        {top_patterns.to_string(index=False)}
-        ```
+        Top 10 Most Frequent Defect Patterns:
+        {defect_patterns.to_string()}
         
-        #### High Risk Test Cases (>50% Failure Rate)
-        ```
-        {high_risk_tcs.to_string(index=False)}
-        ```
+        High-Risk Test Cases (>50% failure rate):
+        {high_risk_tcs.to_string()}
         
-        #### Uncovered Test Cases (No Execution in Last 30 Days)
-        ```
-        Sample of Uncovered Test Cases:
-        {uncovered_tcs.head().to_string(index=False)}
-        Total Uncovered: {len(uncovered_tcs)} test cases
-        ```
+        Test Cases Not Executed in Last 30 Days:
+        {list(uncovered_tcs)[:5]}  # Showing first 5 uncovered test cases
         
-        #### Recommendations
-        1. Prioritize execution of uncovered test cases
-        2. Investigate and fix high-risk test cases
-        3. Review test coverage gaps in LOBs
-        4. Address common failure patterns
+        Defect Resolution by LOB:
+        Resolution Rate (%):
+        {resolution_rate.to_string()}
+        
+        Please provide:
+        1. Coverage Gap Analysis
+           - Identify areas with insufficient test coverage
+           - Analyze test distribution across LOBs
+           - Highlight critical functionality gaps
+           - Recommend coverage improvements
+        
+        2. Test Case Risk Assessment
+           - Analyze patterns in high-risk test cases
+           - Evaluate impact on business functionality
+           - Identify common failure modes
+           - Suggest stability improvements
+        
+        3. Defect Resolution Analysis
+           - Evaluate defect resolution efficiency
+           - Identify bottlenecks in defect lifecycle
+           - Analyze patterns in unresolved defects
+           - Recommend process improvements
+        
+        4. Test Execution Patterns
+           - Analyze test execution frequency
+           - Identify under-tested scenarios
+           - Evaluate test data coverage
+           - Suggest execution strategy improvements
+        
+        5. Quality Metrics Assessment
+           - Evaluate overall test effectiveness
+           - Analyze defect detection efficiency
+           - Assess test reliability
+           - Recommend quality improvements
+        
+        6. Resource Optimization
+           - Identify areas needing additional testing
+           - Suggest resource allocation improvements
+           - Recommend automation opportunities
+           - Propose test optimization strategies
+        
+        7. Action Plan
+           - Prioritized list of gaps to address
+           - Specific recommendations for each gap
+           - Timeline suggestions for improvements
+           - Resource requirements and allocation
+        
+        Focus on providing data-driven insights and specific, actionable recommendations based on the actual test results.
+        Prioritize gaps based on business impact and provide concrete steps for improvement.
         """
         
-        st.markdown(analysis_template)
+        with st.spinner("Generating gap analysis..."):
+            ai_insights = get_ai_analysis(analysis_prompt)
+            if ai_insights:
+                st.markdown(ai_insights)
 
 def lob_analysis_tab(df):
     """Tab 4: LOB-Wise Failure Analysis"""
