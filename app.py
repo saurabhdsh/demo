@@ -79,17 +79,58 @@ if 'ai_analysis' not in st.session_state:
 
 def get_ai_analysis(prompt):
     """Get AI analysis using Azure OpenAI API"""
-    if ai_client is not None:
+    if ai_client is not None and st.session_state.data is not None:
         try:
+            # Get the current data
+            df = st.session_state.data
+            failed_df = df[df['Execution Status'] == 'Fail']
+            
+            # Calculate key metrics for context
+            total_tests = len(df)
+            total_failures = len(failed_df)
+            failure_rate = (total_failures / total_tests * 100) if total_tests > 0 else 0
+            
+            # Calculate distributions
+            defect_dist = failed_df['Defect Type'].value_counts()
+            severity_dist = failed_df['Severity'].value_counts()
+            priority_dist = failed_df['Priority'].value_counts()
+            status_dist = failed_df['Defect Status'].value_counts()
+            lob_dist = failed_df['LOB'].value_counts()
+            
+            # Create context for the AI
+            system_context = f"""You are a QA expert analyzing test failure data. Current metrics:
+            - Total Tests: {total_tests}
+            - Failed Tests: {total_failures}
+            - Failure Rate: {failure_rate:.2f}%
+            
+            Defect Distribution:
+            {defect_dist.to_string()}
+            
+            Severity Distribution:
+            {severity_dist.to_string()}
+            
+            Priority Distribution:
+            {priority_dist.to_string()}
+            
+            Status Distribution:
+            {status_dist.to_string()}
+            
+            LOB Distribution:
+            {lob_dist.to_string()}
+            
+            Provide clear, actionable insights based on this data and the user's question.
+            Format your response in markdown with appropriate headers and bullet points.
+            Focus on specific patterns and recommendations."""
+            
             # Get AI response with optimized system message
             response = ai_client.chat.completions.create(
                 model=DEPLOYMENT_NAME,
                 messages=[
-                    {"role": "system", "content": "You are a QA expert analyzing test failure data. Provide clear, concise insights based on the metrics and data provided. Focus on actionable insights and specific recommendations."},
+                    {"role": "system", "content": system_context},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
-                max_tokens=500  # Reduced tokens for more focused responses
+                max_tokens=500
             )
             
             # Return the response content
@@ -99,7 +140,7 @@ def get_ai_analysis(prompt):
             st.error(f"Error generating AI analysis: {str(e)}")
             return None
     else:
-        st.warning("Azure OpenAI client not initialized. Please check your configuration.")
+        st.warning("Azure OpenAI client not initialized or no data loaded. Please check your configuration and upload data.")
         return None
 
 def truncate_prompt(prompt):
@@ -1181,6 +1222,45 @@ def root_cause_analysis_tab(df):
                     mime="text/markdown"
                 )
 
+def add_floating_prompt_to_tab(tab_name, analysis_function):
+    """Create floating prompt section for a specific tab"""
+    with st.container():
+        st.markdown('<div class="floating-chat">', unsafe_allow_html=True)
+        
+        placeholder_text = {
+            "failure": "Ask about failure patterns, defect types, or specific issues...",
+            "trend": "Ask about trends, patterns over time, or specific date ranges...",
+            "gap": "Ask about gaps in testing, coverage, or specific areas...",
+            "lob": "Ask about specific LOB performance, issues, or comparisons...",
+            "predictive": "Ask about predictions, future trends, or risk areas..."
+        }.get(tab_name, "Ask a question about the analysis...")
+        
+        user_input = st.text_input(
+            "",
+            placeholder=placeholder_text,
+            key=f"chat_input_{tab_name}"
+        )
+        
+        if st.button("Ask", key=f"ask_button_{tab_name}"):
+            if user_input:
+                with st.spinner("Analyzing..."):
+                    # Create context-aware prompt based on tab
+                    tab_context = {
+                        "failure": "Focus on failure patterns and root causes. ",
+                        "trend": "Focus on trends and patterns over time. ",
+                        "gap": "Focus on testing gaps and areas needing attention. ",
+                        "lob": "Focus on LOB-specific analysis. ",
+                        "predictive": "Focus on predictions and future risks. "
+                    }.get(tab_name, "")
+                    
+                    enhanced_prompt = f"{tab_context}{user_input}"
+                    analysis_result = analysis_function(enhanced_prompt)
+                    
+                    if analysis_result:
+                        st.markdown(analysis_result)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
 # Main application
 st.title("🔍 QA Failure Analysis Dashboard")
 
@@ -1233,6 +1313,18 @@ if uploaded_file is not None:
         with col2:
             if st.button("🤖 Analyze with AI", type="primary", use_container_width=True):
                 st.session_state.ai_analysis = True
+                with st.spinner("Generating comprehensive analysis..."):
+                    overview_prompt = """
+                    Provide a comprehensive overview of the test execution results, including:
+                    1. Key metrics and their implications
+                    2. Major failure patterns
+                    3. Critical areas needing attention
+                    4. Recommendations for improvement
+                    5. Risk assessment
+                    """
+                    analysis = get_ai_analysis(overview_prompt)
+                    if analysis:
+                        st.markdown(analysis)
         
         # Add spacing after button
         st.write("")
