@@ -1048,60 +1048,69 @@ def root_cause_analysis_tab(df):
     """Tab 6: Root Cause Analysis"""
     st.header("🔍 Root Cause Analysis")
     
-    # Group defects by type and description for analysis
-    defect_analysis = df[df['Execution Status'] == 'Fail'].groupby(
-        ['Defect Type', 'Test Case ID', 'Test Case Name', 'Defect Description', 'LOB']
-    ).size().reset_index(name='occurrence_count')
+    # Filter failed test cases and group by defect type
+    failed_df = df[df['Execution Status'] == 'Fail']
     
     # Create defect type filter
+    defect_types = sorted(failed_df['Defect Type'].unique())
+    if len(defect_types) == 0:
+        st.warning("No defects found in the data.")
+        return
+        
     selected_defect_type = st.selectbox(
         "Select Defect Type for Analysis",
-        options=sorted(defect_analysis['Defect Type'].unique())
+        options=defect_types
     )
     
     # Filter data by selected defect type
-    filtered_defects = defect_analysis[defect_analysis['Defect Type'] == selected_defect_type]
-    
+    filtered_defects = failed_df[failed_df['Defect Type'] == selected_defect_type]
+    if len(filtered_defects) == 0:
+        st.warning(f"No defects found for type: {selected_defect_type}")
+        return
+        
     # Display defect distribution
     col1, col2 = st.columns(2)
     
     with col1:
         # Test case distribution for selected defect type
-        test_case_dist = filtered_defects.groupby(['Test Case ID', 'Test Case Name']).agg({
-            'occurrence_count': 'sum',
-            'Defect Description': lambda x: '<br>'.join(x.unique())
+        test_case_dist = filtered_defects.groupby('Test Case ID').agg({
+            'Defect Description': lambda x: ' | '.join(x.unique()),
+            'Severity': 'first',
+            'Priority': 'first',
+            'Defect ID': 'count'
         }).reset_index()
         
         fig_test_cases = px.bar(
             test_case_dist,
             x='Test Case ID',
-            y='occurrence_count',
+            y='Defect ID',
+            color='Severity',
             title=f'Test Cases Affected by {selected_defect_type}',
-            labels={'occurrence_count': 'Number of Occurrences', 'Test Case ID': 'Test Case'},
-            custom_data=['Test Case Name', 'Defect Description']
+            labels={'Defect ID': 'Number of Occurrences', 'Test Case ID': 'Test Case'},
+            custom_data=['Defect Description', 'Priority']
         )
         fig_test_cases.update_layout(template='plotly_white')
         fig_test_cases.update_traces(
             hovertemplate="<b>Test Case:</b> %{x}<br>" +
-                         "<b>Name:</b> %{customdata[0]}<br>" +
                          "<b>Occurrences:</b> %{y}<br>" +
-                         "<b>Defect Details:</b><br>%{customdata[1]}"
+                         "<b>Priority:</b> %{customdata[1]}<br>" +
+                         "<b>Defect Details:</b><br>%{customdata[0]}"
         )
         st.plotly_chart(fig_test_cases)
     
     with col2:
         # LOB distribution for selected defect type
         lob_dist = filtered_defects.groupby('LOB').agg({
-            'occurrence_count': 'sum',
-            'Test Case Name': lambda x: '<br>'.join(x.unique()[:3]) + ('...' if len(x.unique()) > 3 else '')
+            'Test Case ID': lambda x: ' | '.join(x.unique()[:3]) + ('...' if len(x.unique()) > 3 else ''),
+            'Defect ID': 'count'
         }).reset_index()
         
         fig_lob = px.pie(
             lob_dist,
-            values='occurrence_count',
+            values='Defect ID',
             names='LOB',
             title=f'LOB Distribution for {selected_defect_type}',
-            custom_data=['Test Case Name']
+            custom_data=['Test Case ID']
         )
         fig_lob.update_layout(template='plotly_white')
         fig_lob.update_traces(
@@ -1119,27 +1128,20 @@ def root_cause_analysis_tab(df):
     # Create a table of unique defect descriptions and their impact
     defect_patterns = filtered_defects.groupby('Defect Description').agg({
         'Test Case ID': lambda x: ', '.join(x.unique()),
-        'Test Case Name': lambda x: ', '.join(x.unique()),
         'LOB': lambda x: ', '.join(x.unique()),
-        'occurrence_count': 'sum'
+        'Defect ID': 'count'
     }).reset_index()
     
     # Sort by occurrence count
-    defect_patterns = defect_patterns.sort_values('occurrence_count', ascending=False)
+    defect_patterns = defect_patterns.sort_values('Defect ID', ascending=False)
+    defect_patterns = defect_patterns.rename(columns={'Defect ID': 'Count'})
     
     # Display the patterns in an expandable section
     with st.expander("View Detailed Defect Patterns", expanded=True):
-        # Create a formatted display of the patterns without using style
-        st.dataframe(
-            defect_patterns.sort_values('occurrence_count', ascending=False),
-            use_container_width=True
-        )
+        st.dataframe(defect_patterns, use_container_width=True)
     
     # AI Root Cause Analysis
     st.subheader("🤖 AI Root Cause Analysis")
-    
-    # Prepare data for AI analysis
-    defect_context = filtered_defects.to_dict('records')
     
     analysis_prompt = f"""
     Analyze the following defect patterns for {selected_defect_type} issues:
@@ -1148,7 +1150,7 @@ def root_cause_analysis_tab(df):
     {defect_patterns.to_string()}
     
     Test Case Context:
-    {filtered_defects[['Test Case ID', 'Test Case Name', 'Defect Description']].to_string()}
+    {filtered_defects[['Test Case ID', 'Defect Description']].to_string()}
     
     Please provide a detailed root cause analysis including:
     1. Common patterns and underlying causes
@@ -1276,6 +1278,8 @@ else:
         'Defect ID': ['', 'D_001'],
         'Defect Description': ['', 'Sample defect'],
         'Defect Type': ['', 'Automation'],
-        'Defect Status': ['', 'Open']
+        'Defect Status': ['', 'Open'],
+        'Severity': ['', 'High'],
+        'Priority': ['', 'P1']
     }
     st.dataframe(pd.DataFrame(sample_data)) 
