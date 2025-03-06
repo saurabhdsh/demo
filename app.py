@@ -121,7 +121,7 @@ def load_and_validate_data(file):
         df = pd.read_csv(file)
         required_columns = ['Execution Date', 'User Story', 'Test Case ID', 'LOB', 
                           'Execution Status', 'Defect ID', 'Defect Description', 
-                          'Defect Type', 'Defect Status']
+                          'Defect Type', 'Defect Status', 'Severity', 'Priority']
         
         # Check if required columns exist
         missing_columns = [col for col in required_columns if col not in df.columns]
@@ -130,7 +130,21 @@ def load_and_validate_data(file):
             return None
             
         # Convert Execution Date to datetime
-        df['Execution Date'] = pd.to_datetime(df['Execution Date'])
+        df['Execution Date'] = pd.to_datetime(df['Execution Date'], format='%d/%m/%y')
+        
+        # Fill NaN values appropriately
+        df['Severity'].fillna('Medium', inplace=True)
+        df['Priority'].fillna('P3', inplace=True)
+        df['Defect Type'].fillna('Unknown', inplace=True)
+        df['Defect Status'].fillna('Not Applicable', inplace=True)
+        
+        # For failed test cases without defect info, add placeholder
+        failed_mask = (df['Execution Status'] == 'Fail') & (df['Defect ID'].isna())
+        df.loc[failed_mask, 'Defect ID'] = df.loc[failed_mask, 'Test Case ID'].apply(lambda x: f'D_{x}')
+        df.loc[failed_mask, 'Defect Description'] = 'Failure under investigation'
+        df.loc[failed_mask, 'Defect Type'] = 'Unknown'
+        df.loc[failed_mask, 'Defect Status'] = 'Open'
+        
         return df
     except Exception as e:
         st.error(f"Error loading file: {str(e)}")

@@ -22,8 +22,15 @@ def truncate_data_for_context(df: pd.DataFrame) -> dict:
         'priority_dist': failed_df['Priority'].value_counts().to_dict(),
         'status_dist': failed_df['Defect Status'].value_counts().to_dict(),
         'lob_dist': failed_df['LOB'].value_counts().to_dict(),
-        # Include recent failures sample
-        'recent_issues': recent_failures[['Test Case ID', 'Defect Type', 'Severity', 'Priority', 'Defect Status']].to_dict('records')
+        # Include recent failures sample with test case ID instead of name
+        'recent_issues': recent_failures[[
+            'Test Case ID', 
+            'Defect Type', 
+            'Severity', 
+            'Priority', 
+            'Defect Status',
+            'Defect Description'
+        ]].to_dict('records')
     }
     
     return metrics
@@ -49,7 +56,8 @@ User Question: {user_query}
 Provide a concise analysis focusing on:
 1. Direct answer to the user's question
 2. Key insights from the relevant metrics
-3. Specific recommendations if applicable"""
+3. Specific recommendations if applicable
+4. If the question is about specific test cases, include their failure details and current status"""
 
     return base_prompt
 
