@@ -8,21 +8,21 @@ from sklearn.linear_model import LinearRegression
 import os
 from dotenv import load_dotenv
 import openai
-from functools import reduce
 from azure.identity import ClientSecretCredential, get_bearer_token_provider
 from azure.keyvault.secrets import SecretClient
-from floating_prompt import add_floating_prompt_to_tab
 
 # Load environment variables
 load_dotenv()
 
+# Configure Azure OpenAI settings
+KEY_VAULT_NAME = "kv-uais-nonprod"
+KV_URI = f"https://{KEY_VAULT_NAME}.vault.azure.net/"
+AZURE_OPENAI_ENDPOINT = "https://prod-1.services.unitedaistudio.uhg.com/aoai-shared-openai-prod-1"
+DEPLOYMENT_NAME = "gpt-4o_2024-05-13"
+
 # Initialize Azure OpenAI client
 try:
     # Connect to Key Vault
-    KEY_VAULT_NAME = "kv-uais-nonprod"
-    KV_URI = f"https://{KEY_VAULT_NAME}.vault.azure.net/"
-    
-    # Use environment variables for initial connection
     credential = ClientSecretCredential(
         tenant_id=os.getenv('APP_TENANT_ID'),
         client_id=os.getenv('APP_CLIENT_ID'),
@@ -45,10 +45,6 @@ try:
     
     # Get the bearer token provider
     token_provider = get_bearer_token_provider(az_cred, "https://cognitiveservices.azure.com/.default")
-    
-    # Azure OpenAI settings
-    AZURE_OPENAI_ENDPOINT = "https://prod-1.services.unitedaistudio.uhg.com/aoai-shared-openai-prod-1"
-    DEPLOYMENT_NAME = "gpt-4o_2024-05-13"
     
     # Initialize the OpenAI client
     ai_client = openai.AzureOpenAI(
@@ -81,23 +77,38 @@ def get_ai_analysis(prompt):
     """Get AI analysis using Azure OpenAI API"""
     if ai_client is not None:
         try:
-            # Get AI response with optimized system message
             response = ai_client.chat.completions.create(
                 model=DEPLOYMENT_NAME,
                 messages=[
-                    {"role": "system", "content": "You are a QA expert analyzing test failure data. Provide clear, concise insights based on the metrics and data provided. Focus on actionable insights and specific recommendations."},
+                    {"role": "system", "content": "You are a QA expert specializing in test failure analysis. Focus on specific test case issues, their patterns, and provide detailed contextual insights based on the actual defect descriptions and types provided."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
-                max_tokens=500  # Reduced tokens for more focused responses
+                max_tokens=1000
             )
-            
-            # Return the response content
             return response.choices[0].message.content
-            
         except Exception as e:
-            st.error(f"Error generating AI analysis: {str(e)}")
-            return None
+            if "context_length_exceeded" in str(e):
+                st.error("Analysis contains too much data. Trying with summarized information...")
+                # Try again with truncated data
+                try:
+                    truncated_prompt = truncate_prompt(prompt)
+                    response = ai_client.chat.completions.create(
+                        model=DEPLOYMENT_NAME,
+                        messages=[
+                            {"role": "system", "content": "You are a QA expert specializing in test failure analysis. Provide concise insights based on the summarized data."},
+                            {"role": "user", "content": truncated_prompt}
+                        ],
+                        temperature=0.7,
+                        max_tokens=1000
+                    )
+                    return response.choices[0].message.content
+                except Exception as nested_e:
+                    st.error(f"Error generating AI analysis: {str(nested_e)}")
+                    return None
+            else:
+                st.error(f"Error generating AI analysis: {str(e)}")
+                return None
     else:
         st.warning("Azure OpenAI client not initialized. Please check your configuration.")
         return None
@@ -153,11 +164,8 @@ def get_summary_stats(df):
     }
 
 def failure_analysis_tab(df):
-    """Tab 1: Failure Analysis with Interactive Prompting"""
+    """Tab 1: Failure Analysis"""
     st.header("🔍 Failure Analysis")
-    
-    # Add floating prompt
-    add_floating_prompt_to_tab("failure", get_ai_analysis)
     
     # Add IsWeekend column at the start
     df['IsWeekend'] = df['Execution Date'].dt.dayofweek.isin([5, 6])
@@ -500,9 +508,6 @@ def trend_analysis_tab(df):
     """Tab 2: Failure Trends Over Time"""
     st.header("📈 Failure Trends Over Time")
     
-    # Add floating prompt
-    add_floating_prompt_to_tab("trend", get_ai_analysis)
-    
     # Date range filter
     date_range = st.date_input(
         "Select Date Range",
@@ -712,9 +717,6 @@ def gap_analysis_tab(df):
     """Tab 3: Gap Analysis"""
     st.header("🔍 Gap Analysis")
     
-    # Add floating prompt
-    add_floating_prompt_to_tab("gap", get_ai_analysis)
-    
     col1, col2 = st.columns(2)
     
     with col1:
@@ -921,9 +923,6 @@ def lob_analysis_tab(df):
     """Tab 4: LOB-Wise Failure Analysis"""
     st.header("📊 LOB-Wise Failure Analysis")
     
-    # Add floating prompt
-    add_floating_prompt_to_tab("lob", get_ai_analysis)
-    
     # Add weekend vs weekday analysis
     df['DayOfWeek'] = df['Execution Date'].dt.day_name()
     df['IsWeekend'] = df['Execution Date'].dt.dayofweek.isin([5, 6])
@@ -1124,9 +1123,6 @@ def lob_analysis_tab(df):
 def predictive_analysis_tab(df):
     """Tab 5: Predictive Analysis"""
     st.header("🔮 Predictive Analysis")
-    
-    # Add floating prompt
-    add_floating_prompt_to_tab("predictive", get_ai_analysis)
     
     # Prepare data for prediction
     df['DaysSinceStart'] = (df['Execution Date'] - df['Execution Date'].min()).dt.days

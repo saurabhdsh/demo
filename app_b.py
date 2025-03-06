@@ -8,6 +8,7 @@ from sklearn.linear_model import LinearRegression
 import os
 from dotenv import load_dotenv
 import openai
+from functools import reduce
 
 # Load environment variables
 load_dotenv()
@@ -19,43 +20,454 @@ st.set_page_config(
     layout="wide"
 )
 
+# Custom CSS for floating prompt
+st.markdown("""
+<style>
+.floating-chat {
+    position: fixed;
+    left: 20px;
+    bottom: 20px;
+    width: 300px;
+    background-color: white;
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    border: 1px solid #e0e0e0;
+}
+.chat-response {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    background-color: #f7f7f7;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* Defect Item Styling */
+.defect-item {
+    padding: 12px;
+    margin: 10px 0;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 8px;
+    border: 1px solid #eaecef;
+}
+
+.defect-item p {
+    margin: 5px 0;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: 500;
+    background: #e9ecef;
+    color: #495057;
+}
+
+.test-case {
+    font-size: 0.9em;
+    color: #6c757d;
+}
+
+/* Enhanced Card Styles */
+.response-card {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 0;
+}
+
+.title-section {
+    background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.title-section h1 {
+    font-size: 1.1em;
+    margin: 0;
+    font-weight: 600;
+}
+
+.title-section h2 {
+    font-size: 0.9em;
+    opacity: 0.9;
+    margin: 4px 0 0 0;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.metric-card {
+    background: white;
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    border: 1px solid #f0f0f0;
+}
+
+.metric-label {
+    color: #64748b;
+    font-size: 0.75em;
+    margin-bottom: 4px;
+}
+
+.metric-value {
+    font-size: 1.1em;
+    font-weight: 600;
+    background: linear-gradient(45deg, #2563eb, #3b82f6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.distribution-section {
+    background: white;
+    padding: 16px;
+    border-radius: 8px;
+    margin: 16px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.distribution-title {
+    color: #1e293b;
+    font-size: 0.9em;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.distribution-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    margin: 6px 0;
+    background: #f8fafc;
+    border-radius: 6px;
+    font-size: 0.8em;
+}
+
+.distribution-item span:last-child {
+    font-weight: 500;
+    color: #2563eb;
+}
+
+.recommendations-section {
+    background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+    color: white;
+    padding: 16px;
+    border-radius: 8px;
+    margin-top: 16px;
+}
+
+.recommendations-title {
+    font-size: 0.9em;
+    font-weight: 600;
+    margin-bottom: 12px;
+    opacity: 0.9;
+}
+
+.recommendations-list {
+    margin: 0;
+    padding-left: 16px;
+}
+
+.recommendations-list li {
+    margin: 8px 0;
+    font-size: 0.8em;
+    line-height: 1.4;
+    opacity: 0.9;
+}
+
+/* Statistics Styling */
+.metric-value {
+    background: linear-gradient(45deg, #3498db, #2ecc71);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 700;
+}
+
+/* Emoji Styling */
+.response-card h1 emoji, .response-card h2 emoji {
+    font-size: 1.2em;
+    margin-right: 8px;
+}
+
+/* Distribution Values */
+.distribution-value {
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.9em;
+    color: #6c757d;
+    background: #f8f9fa;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* LOB Analysis Specific Styles */
+.lob-stats {
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 8px;
+    margin: 10px 0;
+}
+
+.lob-stats p {
+    font-size: 1.1em;
+    margin-bottom: 15px;
+}
+
+.defect-breakdown {
+    margin-top: 15px;
+}
+
+.defect-breakdown h3 {
+    color: #2c3e50;
+    font-size: 1em;
+    margin: 15px 0 10px 0;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #eaecef;
+}
+
+.defect-breakdown ul {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 20px;
+}
+
+.defect-breakdown li {
+    margin: 8px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 10px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 6px;
+}
+
+.defect-type {
+    font-weight: 500;
+    color: #2c3e50;
+    padding: 2px 8px;
+    background: #e9ecef;
+    border-radius: 12px;
+    font-size: 0.9em;
+}
+
+/* Enhanced Card Styles for LOB Analysis */
+.success-card {
+    border-left: 4px solid #2ecc71;
+    background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(255, 255, 255, 0.9));
+}
+
+.info-card {
+    border-left: 4px solid #3498db;
+    background: linear-gradient(135deg, rgba(52, 152, 219, 0.1), rgba(255, 255, 255, 0.9));
+}
+
+.warning-card {
+    border-left: 4px solid #f1c40f;
+    background: linear-gradient(135deg, rgba(241, 196, 15, 0.1), rgba(255, 255, 255, 0.9));
+}
+
+/* Metric Value Enhancement */
+.metric-value {
+    font-size: 1.4em;
+    font-weight: 700;
+    background: linear-gradient(45deg, #2c3e50, #3498db);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    padding-right: 5px;
+}
+
+/* Status Badge Enhancement */
+.status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: 500;
+    background: #e9ecef;
+    color: #495057;
+    margin-right: 8px;
+}
+
+.status-badge.open {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.status-badge.closed {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.status-badge.in-progress {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+/* Key Findings Enhancement */
+.warning-card ul {
+    padding-left: 20px;
+}
+
+.warning-card li {
+    margin: 10px 0;
+    line-height: 1.6;
+    color: #2c3e50;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .lob-stats {
+        padding: 10px;
+    }
+    
+    .metric-value {
+        font-size: 1.2em;
+    }
+    
+    .defect-breakdown li {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Initialize session state
 if 'data' not in st.session_state:
     st.session_state.data = None
 if 'ai_analysis' not in st.session_state:
     st.session_state.ai_analysis = False
 
+# Initialize OpenAI client at the start of the script
+if 'openai_client' not in st.session_state:
+    try:
+        st.session_state.openai_client = openai.OpenAI(
+            api_key=os.getenv('OPENAI_API_KEY')
+        )
+    except Exception as e:
+        st.warning(f"OpenAI client initialization failed: {str(e)}")
+        st.session_state.openai_client = None
+
 def get_ai_analysis(prompt):
-    """Get AI analysis using OpenAI API"""
-    if 'OPENAI_API_KEY' in os.environ:
+    """Get AI analysis using Azure OpenAI API"""
+    if st.session_state.openai_client is not None and st.session_state.data is not None:
         try:
-            client = openai.OpenAI(api_key=os.environ['OPENAI_API_KEY'])
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+            # Calculate actual distributions from the data
+            df = st.session_state.data
+            failed_df = df[df['Execution Status'] == 'Fail']
+            
+            # Calculate defect type distribution
+            defect_type_dist = failed_df['Defect Type'].value_counts()
+            defect_type_percentages = (defect_type_dist / defect_type_dist.sum() * 100).round(1)
+            
+            # Calculate severity distribution
+            severity_dist = failed_df['Severity'].value_counts()
+            severity_percentages = (severity_dist / severity_dist.sum() * 100).round(1)
+            
+            # Calculate priority distribution
+            priority_dist = failed_df['Priority'].value_counts()
+            priority_percentages = (priority_dist / priority_dist.sum() * 100).round(1)
+            
+            # Calculate status distribution
+            status_dist = failed_df['Defect Status'].value_counts()
+            status_percentages = (status_dist / status_dist.sum() * 100).round(1)
+            
+            # Format distributions for the system message
+            defect_type_metrics = "\n".join([f"              • {level}: {count}" for level, count in defect_type_dist.items()])
+            severity_metrics = "\n".join([f"              • {level}: {count}" for level, count in severity_dist.items()])
+            priority_metrics = "\n".join([f"              • {level}: {count}" for level, count in priority_dist.items()])
+            
+            defect_type_analysis = "\n".join([f"              • {level}: {count} defects ({percentage}%)" 
+                                         for level, count, percentage in zip(defect_type_dist.index, 
+                                                                          defect_type_dist.values, 
+                                                                          defect_type_percentages)])
+            
+            severity_analysis = "\n".join([f"              • {level}: {count} defects ({percentage}%)" 
+                                         for level, count, percentage in zip(severity_dist.index, 
+                                                                          severity_dist.values, 
+                                                                          severity_percentages)])
+            
+            priority_analysis = "\n".join([f"              • {level}: {count} defects ({percentage}%)" 
+                                         for level, count, percentage in zip(priority_dist.index, 
+                                                                          priority_dist.values, 
+                                                                          priority_percentages)])
+            
+            status_analysis = "\n".join([f"              • {status}: {count} defects ({percentage}%)" 
+                                       for status, count, percentage in zip(status_dist.index, 
+                                                                         status_dist.values, 
+                                                                         status_percentages)])
+            
+            # Format system message with actual data
+            system_message = f"""You are a QA expert specializing in test failure analysis. 
+            Your response should be clear and concise, focusing on key metrics and actual values.
+            Format your response using the smallest possible heading levels:
+            
+            ##### 📊 [Brief Title]
+            ###### [One-line Context]
+            
+            **Key Metrics:**
+            - Total Defects: {len(failed_df)}
+            - Defect Type Distribution:
+{defect_type_metrics}
+            - Severity Distribution:
+{severity_metrics}
+            - Priority Distribution:
+{priority_metrics}
+            
+            **Distribution Analysis:**
+            - By Defect Type:
+{defect_type_analysis}
+            - By Severity:
+{severity_analysis}
+            - By Priority:
+{priority_analysis}
+            - By Status:
+{status_analysis}
+            
+            Note: Use these actual values in your analysis. For queries about specific defect types, provide the exact count and percentage.
+            When asked about specific types of issues (e.g., Environment issues), filter the data accordingly and provide precise numbers."""
+
+            # Get AI response
+            response = st.session_state.openai_client.chat.completions.create(
+                model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "You are a QA expert specializing in test failure analysis. Focus on specific test case issues, their patterns, and provide detailed contextual insights based on the actual defect descriptions and types provided."},
+                    {"role": "system", "content": system_message},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
                 max_tokens=1000
             )
-            return response.choices[0].message.content
+            
+            # Get the response content and render it
+            content = response.choices[0].message.content
+            st.markdown(content)
+            
         except Exception as e:
             if "context_length_exceeded" in str(e):
                 st.error("Analysis contains too much data. Trying with summarized information...")
-                # Try again with truncated data
                 try:
                     truncated_prompt = truncate_prompt(prompt)
-                    response = client.chat.completions.create(
-                        model="gpt-3.5-turbo",
+                    response = st.session_state.openai_client.chat.completions.create(
+                        model="gpt-4",
                         messages=[
-                            {"role": "system", "content": "You are a QA expert specializing in test failure analysis. Provide concise insights based on the summarized data."},
+                            {"role": "system", "content": system_message},
                             {"role": "user", "content": truncated_prompt}
                         ],
                         temperature=0.7,
                         max_tokens=1000
                     )
-                    return response.choices[0].message.content
+                    st.markdown(response.choices[0].message.content)
                 except Exception as nested_e:
                     st.error(f"Error generating AI analysis: {str(nested_e)}")
                     return None
@@ -63,7 +475,7 @@ def get_ai_analysis(prompt):
                 st.error(f"Error generating AI analysis: {str(e)}")
                 return None
     else:
-        st.warning("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable for AI analysis.")
+        st.warning("Azure OpenAI client not initialized. Please check your configuration.")
         return None
 
 def truncate_prompt(prompt):
@@ -85,7 +497,7 @@ def load_and_validate_data(file):
         df = pd.read_csv(file)
         required_columns = ['Execution Date', 'User Story', 'Test Case ID', 'LOB', 
                           'Execution Status', 'Defect ID', 'Defect Description', 
-                          'Defect Type', 'Defect Status']
+                          'Defect Type', 'Defect Status', 'Severity', 'Priority']
         
         # Check if required columns exist
         missing_columns = [col for col in required_columns if col not in df.columns]
@@ -103,22 +515,98 @@ def load_and_validate_data(file):
 def get_summary_stats(df):
     """Calculate summary statistics"""
     total_tests = len(df)
+    failed_df = df[df['Execution Status'] == 'Fail']
+    
+    # Calculate basic metrics
     pass_rate = (df['Execution Status'].value_counts().get('Pass', 0) / total_tests) * 100
     fail_rate = (df['Execution Status'].value_counts().get('Fail', 0) / total_tests) * 100
-    total_defects = len(df[df['Execution Status'] == 'Fail'])
-    unique_defects = df['Defect ID'].nunique()
+    total_defects = len(failed_df)
+    unique_defects = failed_df['Defect ID'].nunique()
+    
+    # Calculate defect type distribution
+    defect_type_dist = failed_df['Defect Type'].value_counts()
+    
+    # Calculate severity distribution
+    severity_dist = failed_df['Severity'].value_counts()
+    
+    # Calculate priority distribution
+    priority_dist = failed_df['Priority'].value_counts()
+    
+    # Calculate LOB distribution
+    lob_dist = failed_df['LOB'].value_counts()
     
     return {
         'total_tests': total_tests,
         'pass_rate': pass_rate,
         'fail_rate': fail_rate,
         'total_defects': total_defects,
-        'unique_defects': unique_defects
+        'unique_defects': unique_defects,
+        'defect_type_dist': defect_type_dist,
+        'severity_dist': severity_dist,
+        'priority_dist': priority_dist,
+        'lob_dist': lob_dist
     }
 
+def get_ai_response(prompt, context):
+    """Get AI analysis for specific prompts"""
+    try:
+        if st.session_state.openai_client is None:
+            return "OpenAI client not initialized. Please check your environment variables."
+            
+        analysis_prompt = f"""
+        Based on the following context about test failures:
+        {context}
+        
+        User Question: {prompt}
+        
+        Please provide a detailed analysis focusing specifically on the user's question.
+        Include:
+        1. Direct answer to the question
+        2. Supporting evidence from the data
+        3. Recommendations if applicable
+        """
+        
+        response = st.session_state.openai_client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a QA expert analyzing test failure data."},
+                {"role": "user", "content": analysis_prompt}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Error generating analysis: {str(e)}"
+
+def floating_prompt_section():
+    """Create floating prompt section"""
+    with st.container():
+        st.markdown('<div class="floating-chat">', unsafe_allow_html=True)
+        
+        user_input = st.text_input(
+            "",
+            placeholder="Ask questions like: 'What are the open defects?' or 'Show defects in C&I module'",
+            key="chat_input"
+        )
+        
+        if st.button("Ask", key="ask_button"):
+            if user_input:
+                with st.spinner("Analyzing..."):
+                    get_ai_analysis(user_input)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
 def failure_analysis_tab(df):
-    """Tab 1: Failure Analysis"""
+    """Tab 1: Failure Analysis with Interactive Prompting"""
     st.header("🔍 Failure Analysis")
+    
+    # Add floating prompt section
+    floating_prompt_section()
+    
+    # Store the current section for context-aware prompting
+    if 'current_section' not in st.session_state:
+        st.session_state.current_section = 'overview'
     
     # Modern styling configuration
     chart_config = {
@@ -128,357 +616,149 @@ def failure_analysis_tab(df):
         'showlegend': True
     }
     
+    # Pass/Fail Distribution
     col1, col2 = st.columns(2)
     
     with col1:
         # Enhanced Pass/Fail Distribution
+        status_counts = df['Execution Status'].value_counts().reset_index()
+        status_counts.columns = ['Status', 'Count']
+        
         fig_status = px.pie(
-            df, 
-            names='Execution Status',
+            status_counts, 
+            values='Count',
+            names='Status',
             title='Overall Pass/Fail Distribution',
             color_discrete_sequence=['#00CC96', '#EF553B'],
-            hole=0.4  # Making it a donut chart
+            hole=0.4
         )
         fig_status.update_layout(**chart_config)
-        fig_status.update_traces(textposition='outside', textinfo='percent+label')
-        st.plotly_chart(fig_status)
+        fig_status.update_traces(textposition='outside', textinfo='percent+label+value')
+        st.plotly_chart(fig_status, use_container_width=True)
     
     with col2:
         # Enhanced LOB-wise Failure Breakdown
-        lob_failures = df[df['Execution Status'] == 'Fail'].groupby('LOB').size()
+        failed_df = df[df['Execution Status'] == 'Fail']
+        lob_failures = failed_df['LOB'].value_counts().reset_index()
+        lob_failures.columns = ['LOB', 'Count']
+        
         fig_lob = px.pie(
-            values=lob_failures.values,
-            names=lob_failures.index,
+            lob_failures,
+            values='Count',
+            names='LOB',
             title='LOB-wise Failure Distribution',
             color_discrete_sequence=px.colors.qualitative.Set3,
             hole=0.4
         )
         fig_lob.update_layout(**chart_config)
-        fig_lob.update_traces(textposition='outside', textinfo='percent+label')
-        st.plotly_chart(fig_lob)
+        fig_lob.update_traces(textposition='outside', textinfo='percent+label+value')
+        st.plotly_chart(fig_lob, use_container_width=True)
 
     # Add detailed failure pattern analysis
     st.subheader("📊 Detailed Failure Pattern Analysis")
     
     # Calculate defect type distribution
-    defect_type_dist = df[df['Execution Status'] == 'Fail'].groupby('Defect Type').agg({
-        'Test Case ID': 'count',
-        'Defect Description': lambda x: '<br>'.join(x.unique())
-    }).reset_index()
+    defect_type_dist = failed_df.groupby(['Defect Type', 'Severity']).size().reset_index(name='Count')
     
     # Create pattern analysis columns
     col3, col4 = st.columns(2)
     
     with col3:
-        # Defect type distribution
+        # Defect type distribution with severity breakdown
         fig_defect_type = px.bar(
             defect_type_dist,
             x='Defect Type',
-            y='Test Case ID',
-            title='Defect Type Distribution',
-            labels={'Test Case ID': 'Number of Failures', 'Defect Type': 'Type of Defect'},
-            color='Defect Type',
+            y='Count',
+            color='Severity',
+            title='Defect Type Distribution by Severity',
+            labels={'Count': 'Number of Failures', 'Defect Type': 'Type of Defect'},
             color_discrete_sequence=px.colors.qualitative.Set3
         )
-        fig_defect_type.update_layout(template='plotly_white')
-        st.plotly_chart(fig_defect_type)
+        fig_defect_type.update_layout(
+            template='plotly_white',
+            xaxis={'categoryorder': 'total descending'}
+        )
+        st.plotly_chart(fig_defect_type, use_container_width=True)
     
     with col4:
-        # Top failing test cases by defect type
-        top_failing_cases = df[df['Execution Status'] == 'Fail'].groupby(['Test Case ID', 'Defect Type']).size()
-        top_failing_cases = top_failing_cases.sort_values(ascending=False).head(10)
-        
-        fig_top_cases = px.bar(
-            x=top_failing_cases.index.get_level_values(0),
-            y=top_failing_cases.values,
-            color=top_failing_cases.index.get_level_values(1),
-            title='Top 10 Failing Test Cases by Defect Type',
-            labels={'x': 'Test Case ID', 'y': 'Number of Failures'},
+        # Priority distribution
+        priority_dist = failed_df.groupby(['Priority', 'Defect Status']).size().reset_index(name='Count')
+        fig_priority = px.bar(
+            priority_dist,
+            x='Priority',
+            y='Count',
+            color='Defect Status',
+            title='Priority Distribution by Status',
+            labels={'Count': 'Number of Defects'},
             color_discrete_sequence=px.colors.qualitative.Set3
         )
-        fig_top_cases.update_layout(template='plotly_white')
-        st.plotly_chart(fig_top_cases)
+        fig_priority.update_layout(
+            template='plotly_white',
+            xaxis={'categoryorder': 'total descending'}
+        )
+        st.plotly_chart(fig_priority, use_container_width=True)
 
-    # Add heatmap for Automation and Manual issues
-    st.subheader("🔥 Automation vs Manual Issues Heatmap")
+    # Add defect status breakdown
+    st.subheader("🎯 Defect Status Analysis")
+    
+    col5, col6 = st.columns(2)
+    
+    with col5:
+        # Status distribution by LOB
+        status_by_lob = failed_df.groupby(['LOB', 'Defect Status']).size().reset_index(name='Count')
+        fig_status_lob = px.bar(
+            status_by_lob,
+            x='LOB',
+            y='Count',
+            color='Defect Status',
+            title='Defect Status Distribution by LOB',
+            labels={'Count': 'Number of Defects'},
+            color_discrete_sequence=px.colors.qualitative.Set3
+        )
+        fig_status_lob.update_layout(template='plotly_white')
+        st.plotly_chart(fig_status_lob, use_container_width=True)
+    
+    with col6:
+        # Severity distribution by status
+        severity_by_status = failed_df.groupby(['Severity', 'Defect Status']).size().reset_index(name='Count')
+        fig_severity_status = px.bar(
+            severity_by_status,
+            x='Severity',
+            y='Count',
+            color='Defect Status',
+            title='Severity Distribution by Status',
+            labels={'Count': 'Number of Defects'},
+            color_discrete_sequence=px.colors.qualitative.Set3
+        )
+        fig_severity_status.update_layout(
+            template='plotly_white',
+            xaxis={'categoryorder': 'total descending'}
+        )
+        st.plotly_chart(fig_severity_status, use_container_width=True)
+
+    # Add heatmap for defect distribution
+    st.subheader("🔥 Defect Distribution Matrix")
     
     # Create heatmap data
-    issue_types = ['Automation', 'Manual']
-    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    heatmap_data = pd.crosstab(
+        failed_df['Defect Type'],
+        failed_df['LOB'],
+        values=failed_df['Defect ID'],
+        aggfunc='count',
+        normalize='columns'
+    ).fillna(0) * 100
     
-    df['DayOfWeek'] = df['Execution Date'].dt.day_name()
-    heatmap_data = []
-    
-    for issue_type in issue_types:
-        for day in days:
-            count = len(df[
-                (df['Execution Status'] == 'Fail') & 
-                (df['Defect Type'] == issue_type) & 
-                (df['DayOfWeek'] == day)
-            ])
-            heatmap_data.append({
-                'Issue Type': issue_type,
-                'Day': day,
-                'Count': count
-            })
-    
-    heatmap_df = pd.DataFrame(heatmap_data)
-    heatmap_pivot = heatmap_df.pivot(
-        index='Issue Type', 
-        columns='Day', 
-        values='Count'
+    fig_heatmap = px.imshow(
+        heatmap_data,
+        labels=dict(x="LOB", y="Defect Type", color="Percentage"),
+        title="Defect Type Distribution Across LOBs (%)",
+        color_continuous_scale="RdYlBu_r",
+        aspect="auto"
     )
-    
-    fig_heatmap = go.Figure(data=go.Heatmap(
-        z=heatmap_pivot.values,
-        x=days,
-        y=issue_types,
-        colorscale='RdYlBu_r',
-        text=heatmap_pivot.values,
-        texttemplate="%{text}",
-        textfont={"size": 12},
-        hoverongaps=False
-    ))
-    
-    fig_heatmap.update_layout(
-        title='Failure Distribution by Day and Issue Type',
-        xaxis_title='Day of Week',
-        yaxis_title='Issue Type',
-        template='plotly_white'
-    )
+    fig_heatmap.update_traces(text=heatmap_data.round(1), texttemplate="%{text}%")
+    fig_heatmap.update_layout(template='plotly_white')
     
     st.plotly_chart(fig_heatmap, use_container_width=True)
-
-    # Add Test Cases vs Issue Types heatmap
-    st.subheader("🎯 Test Cases vs Issue Types Analysis")
-    
-    # Get failed test cases and their issue types
-    failed_tests = df[df['Execution Status'] == 'Fail']
-    
-    # Extract issue type from Defect Description
-    def extract_issue_type(desc):
-        if pd.isna(desc):
-            return 'Unknown'
-        if 'Environment Issue' in desc:
-            return 'Environment'
-        elif 'Test Data Issue' in desc:
-            return 'Test Data'
-        elif 'Requirement Gap' in desc:
-            return 'Requirement'
-        elif 'Code Issue' in desc:
-            return 'Code'
-        else:
-            return 'Other'
-    
-    failed_tests['Issue Type'] = failed_tests['Defect Description'].apply(extract_issue_type)
-    
-    # Create pivot table for test cases vs issue types
-    test_issue_pivot = pd.crosstab(
-        failed_tests['Test Case ID'],
-        failed_tests['Issue Type']
-    )
-    
-    # Sort test cases by total failures
-    test_issue_pivot['Total'] = test_issue_pivot.sum(axis=1)
-    test_issue_pivot = test_issue_pivot.sort_values('Total', ascending=False).head(15)  # Show top 15 test cases
-    test_issue_pivot = test_issue_pivot.drop('Total', axis=1)
-    
-    fig_test_issues = go.Figure(data=go.Heatmap(
-        z=test_issue_pivot.values,
-        x=test_issue_pivot.columns,
-        y=test_issue_pivot.index,
-        colorscale='YlOrRd',
-        text=test_issue_pivot.values,
-        texttemplate="%{text}",
-        textfont={"size": 12},
-        hoverongaps=False,
-        hovertemplate="Test Case: %{y}<br>Issue Type: %{x}<br>Count: %{z}<extra></extra>"
-    ))
-    
-    fig_test_issues.update_layout(
-        title='Top 15 Failing Test Cases by Issue Type',
-        xaxis_title='Issue Type',
-        yaxis_title='Test Case ID',
-        template='plotly_white',
-        height=600,  # Make it taller to accommodate more test cases
-        xaxis={'tickangle': -45}  # Angle the x-axis labels for better readability
-    )
-    
-    st.plotly_chart(fig_test_issues, use_container_width=True)
-
-    # AI Analysis Section with standardized template
-    if st.session_state.ai_analysis:
-        st.subheader("🤖 AI Analysis")
-        
-        # Get detailed failure patterns
-        automation_issues = df[
-            (df['Execution Status'] == 'Fail') & 
-            (df['Defect Type'] == 'Automation')
-        ].groupby(['Test Case ID', 'Defect Description', 'DayOfWeek']).size().nlargest(5)
-        
-        manual_issues = df[
-            (df['Execution Status'] == 'Fail') & 
-            (df['Defect Type'] == 'Manual')
-        ].groupby(['Test Case ID', 'Defect Description', 'DayOfWeek']).size().nlargest(5)
-        
-        # Standardized analysis template
-        analysis_template = f"""
-        ## Executive Summary
-        
-        ### Critical Metrics
-        - Total Test Cases Analyzed: {len(df)}
-        - Overall Failure Rate: {(len(df[df['Execution Status'] == 'Fail']) / len(df) * 100):.1f}%
-        - Most Affected Module: M&R
-        - Primary Issue Types: Environment, Test Data, Code, and Requirement Issues
-
-        ### Key Findings
-
-        #### 1. Environment Issues
-        ```
-        🔍 High-Priority Test Cases:
-        - TC_001 (M&R Module)
-          • Issue: Environment Configuration
-          • Impact: Critical (Multiple failures during weekends)
-          • Status: Active Investigation
-          • Root Cause: Environment stability during non-business hours
-        
-        📊 Pattern Analysis:
-        - Weekend Environment Issues: 45% of environment-related failures
-        - Configuration Drift: 30% of environment issues
-        - Resource Management: 25% of environment issues
-        ```
-
-        #### 2. Test Data Issues
-        ```
-        🔍 High-Priority Test Cases:
-        - TC_001 (M&R Module)
-          • Issue: Data State Management
-          • Impact: High (Recurring failures)
-          • Status: Under Review
-          • Root Cause: Data synchronization issues
-        
-        📊 Pattern Analysis:
-        - Data Sync Issues: 40% of data-related failures
-        - State Management: 35% of data issues
-        - Data Cleanup: 25% of data issues
-        ```
-
-        ### Technical Impact Assessment
-
-        #### 🔄 Environment Framework
-        ```
-        Affected Components:
-        1. Environment Configuration
-           - Weekend stability issues
-           - Resource allocation problems
-           - Configuration management issues
-
-        2. Resource Management
-           - Cleanup mechanisms
-           - Resource tracking
-           - Health monitoring
-        ```
-
-        #### 🛠 Test Data Infrastructure
-        ```
-        Affected Areas:
-        1. Data Management
-           - State persistence
-           - Sync mechanisms
-           - Cleanup routines
-
-        2. Data Pipeline
-           - Integration points
-           - Validation checks
-           - Recovery procedures
-        ```
-
-        ### Risk Analysis & Mitigation
-
-        #### High Risk (Immediate Action Required)
-        ```
-        1. Environment Stability
-           ⚠️ Risk: Weekend execution failures
-           🔧 Mitigation: Implement 24/7 monitoring
-           📋 Owner: DevOps Team
-
-        2. Data Dependencies
-           ⚠️ Risk: Inconsistent test results
-           🔧 Mitigation: Enhance data management
-           📋 Owner: Test Data Team
-        ```
-
-        #### Medium Risk (Short-term Action)
-        ```
-        1. Resource Management
-           ⚠️ Risk: Resource leaks
-           🔧 Mitigation: Automated cleanup
-           📋 Owner: Infrastructure Team
-
-        2. Data Synchronization
-           ⚠️ Risk: State inconsistencies
-           🔧 Mitigation: Improved sync mechanisms
-           📋 Owner: Test Framework Team
-        ```
-
-        ### Action Plan
-
-        #### Immediate Actions (0-2 Weeks)
-        ```
-        1. Environment Stability
-           ✓ Deploy monitoring solutions
-           ✓ Implement health checks
-           ✓ Setup alerting system
-
-        2. Data Management
-           ✓ Enhance state tracking
-           ✓ Improve cleanup processes
-           ✓ Add validation layers
-        ```
-
-        #### Short-term Actions (2-4 Weeks)
-        ```
-        1. Infrastructure
-           ✓ Optimize resource allocation
-           ✓ Implement auto-scaling
-           ✓ Enhance recovery procedures
-
-        2. Test Framework
-           ✓ Improve data handling
-           ✓ Add retry mechanisms
-           ✓ Enhance logging
-        ```
-
-        ### Recommendations for Scrum
-
-        #### Strategic Initiatives
-        ```
-        1. Infrastructure
-           📈 Implement proactive monitoring
-           📈 Enhance resource management
-           📈 Improve recovery procedures
-
-        2. Process
-           📈 Establish cross-team coordination
-           📈 Implement health checks
-           📈 Create standard procedures
-        ```
-
-        #### Resource Planning
-        ```
-        1. Team Augmentation
-           👥 Environment Specialists
-           👥 Data Engineers
-           👥 Quality Engineers
-
-        2. Tool Enhancement
-           🔧 Monitoring Solutions
-           🔧 Data Management Tools
-           🔧 Test Frameworks
-        ```
-        """
-        
-        st.markdown(analysis_template)
 
 def trend_analysis_tab(df):
     """Tab 2: Failure Trends Over Time"""
@@ -503,230 +783,281 @@ def trend_analysis_tab(df):
         (df['LOB'].isin(selected_lob))
     ]
     
-    # Enhanced time series of failures with hover data
-    daily_stats = filtered_df.groupby(['Execution Date']).agg({
+    # Calculate daily metrics
+    daily_stats = filtered_df.groupby('Execution Date').agg({
         'Execution Status': lambda x: (x == 'Fail').sum(),
-        'Defect Description': lambda x: '<br>'.join(x[x == 'Fail'].unique()),
-        'Defect Type': lambda x: list(x[x == 'Fail'].unique())
+        'Test Case ID': 'count'
     }).reset_index()
+    daily_stats['Failure Rate'] = (daily_stats['Execution Status'] / daily_stats['Test Case ID'] * 100).round(2)
     
-    fig_trend = go.Figure()
-    fig_trend.add_trace(go.Scatter(
-        x=daily_stats['Execution Date'],
-        y=daily_stats['Execution Status'],
-        mode='lines+markers',
-        name='Failures',
-        line=dict(dash='dot'),
-        hovertemplate="<b>Date:</b> %{x}<br>" +
-                     "<b>Failures:</b> %{y}<br>" +
-                     "<b>Defects:</b> %{customdata}<extra></extra>",
-        customdata=daily_stats['Defect Description']
-    ))
-    
-    fig_trend.update_layout(
-        title='Daily Failure Trend with Defect Details',
-        xaxis_title='Date',
-        yaxis_title='Number of Failures',
-        template='plotly_white',
-        hovermode='x unified'
-    )
-    st.plotly_chart(fig_trend, use_container_width=True)
-    
-    # Enhanced defect type trends with details
+    # Create trend analysis columns
     col1, col2 = st.columns(2)
     
     with col1:
-        defect_type_trend = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby(
-            ['Execution Date', 'Defect Type']
-        ).agg({
-            'Test Case ID': 'count',
-            'Defect Description': lambda x: '<br>'.join(x.unique())
-        }).reset_index()
-        
-        fig_defect_trend = px.line(
-            defect_type_trend,
+        # Failure count trend
+        fig_count = px.line(
+            daily_stats,
             x='Execution Date',
-            y='Test Case ID',
-            color='Defect Type',
-            title='Defect Type Trends Over Time',
-            labels={'Test Case ID': 'Number of Failures', 'Execution Date': 'Date'},
-            hover_data=['Defect Description']
+            y='Execution Status',
+            title='Daily Failure Count Trend',
+            labels={'Execution Status': 'Number of Failures', 'Execution Date': 'Date'}
         )
-        fig_defect_trend.update_layout(template='plotly_white')
-        st.plotly_chart(fig_defect_trend)
+        fig_count.update_layout(template='plotly_white')
+        st.plotly_chart(fig_count, use_container_width=True)
     
     with col2:
-        # Weekly pattern analysis
-        filtered_df['DayOfWeek'] = filtered_df['Execution Date'].dt.day_name()
-        weekly_pattern = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby(
-            ['DayOfWeek', 'Defect Type']
-        ).size().reset_index(name='count')
-        
-        fig_weekly = px.bar(
-            weekly_pattern,
-            x='DayOfWeek',
-            y='count',
-            color='Defect Type',
-            title='Weekly Failure Patterns by Defect Type',
-            labels={'count': 'Number of Failures', 'DayOfWeek': 'Day of Week'}
+        # Failure rate trend
+        fig_rate = px.line(
+            daily_stats,
+            x='Execution Date',
+            y='Failure Rate',
+            title='Daily Failure Rate Trend (%)',
+            labels={'Failure Rate': 'Failure Rate (%)', 'Execution Date': 'Date'}
         )
-        fig_weekly.update_layout(template='plotly_white')
-        st.plotly_chart(fig_weekly)
-
-    # AI Analysis Section
-    if st.session_state.ai_analysis:
-        st.subheader("🤖 AI Trend Analysis")
+        fig_rate.update_layout(template='plotly_white')
+        st.plotly_chart(fig_rate, use_container_width=True)
+    
+    # Defect type trends
+    st.subheader("📊 Defect Type Analysis")
+    
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        # Defect type trend
+        defect_trend = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby(
+            ['Execution Date', 'Defect Type']
+        ).size().reset_index(name='Count')
         
-        # Calculate trend metrics
-        total_failures = len(filtered_df[filtered_df['Execution Status'] == 'Fail'])
-        failure_by_type = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby('Defect Type').size()
+        fig_defect = px.line(
+            defect_trend,
+            x='Execution Date',
+            y='Count',
+            color='Defect Type',
+            title='Defect Type Trends',
+            labels={'Count': 'Number of Defects'}
+        )
+        fig_defect.update_layout(template='plotly_white')
+        st.plotly_chart(fig_defect, use_container_width=True)
+    
+    with col4:
+        # Severity trend
+        severity_trend = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby(
+            ['Execution Date', 'Severity']
+        ).size().reset_index(name='Count')
         
-        # Get top recurring defects
-        recurring_defects = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby(
-            ['Defect Description', 'Defect Type']
-        ).size().nlargest(5)
+        fig_severity = px.line(
+            severity_trend,
+            x='Execution Date',
+            y='Count',
+            color='Severity',
+            title='Severity Trends',
+            labels={'Count': 'Number of Defects'}
+        )
+        fig_severity.update_layout(template='plotly_white')
+        st.plotly_chart(fig_severity, use_container_width=True)
+    
+    # Status and Priority Analysis
+    st.subheader("📈 Status and Priority Trends")
+    
+    col5, col6 = st.columns(2)
+    
+    with col5:
+        # Status trend
+        status_trend = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby(
+            ['Execution Date', 'Defect Status']
+        ).size().reset_index(name='Count')
         
-        # Calculate weekly patterns
-        weekly_stats = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby(
-            ['DayOfWeek', 'Defect Type', 'Defect Description']
-        ).size().nlargest(5)
+        fig_status = px.line(
+            status_trend,
+            x='Execution Date',
+            y='Count',
+            color='Defect Status',
+            title='Defect Status Trends',
+            labels={'Count': 'Number of Defects'}
+        )
+        fig_status.update_layout(template='plotly_white')
+        st.plotly_chart(fig_status, use_container_width=True)
+    
+    with col6:
+        # Priority trend
+        priority_trend = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby(
+            ['Execution Date', 'Priority']
+        ).size().reset_index(name='Count')
         
-        # Get recent trend (last 7 days)
-        recent_trend = filtered_df[
-            filtered_df['Execution Date'] >= filtered_df['Execution Date'].max() - pd.Timedelta(days=7)
-        ]
-        recent_failures = recent_trend[recent_trend['Execution Status'] == 'Fail'].groupby(
-            ['Execution Date', 'Defect Type', 'Defect Description']
-        ).size()
-        
-        analysis_prompt = f"""
-        Analyze the following QA execution trends based on actual data:
-
-        Total Failures in Selected Period: {total_failures}
-
-        Failure Distribution by Defect Type:
-        {failure_by_type.to_string()}
-
-        Top 5 Most Recurring Defects:
-        {recurring_defects.to_string()}
-
-        Weekly Failure Patterns:
-        {weekly_stats.to_string()}
-
-        Recent 7-Day Trend:
-        {recent_failures.to_string()}
-
-        Please provide:
-        1. Analysis of specific defect patterns and their frequency
-        2. Weekly vulnerability assessment based on actual failure data
-        3. Impact analysis of most recurring defects
-        4. Correlation between defect types and their occurrence patterns
-        5. Actionable recommendations based on the identified trends
-        6. Specific areas showing improvement or degradation
-        7. Risk assessment for the most critical recurring issues
-        """
-        
-        with st.spinner("Generating trend analysis..."):
-            ai_insights = get_ai_analysis(analysis_prompt)
-            if ai_insights:
-                st.markdown(ai_insights)
+        fig_priority = px.line(
+            priority_trend,
+            x='Execution Date',
+            y='Count',
+            color='Priority',
+            title='Priority Trends',
+            labels={'Count': 'Number of Defects'}
+        )
+        fig_priority.update_layout(template='plotly_white')
+        st.plotly_chart(fig_priority, use_container_width=True)
+    
+    # LOB Analysis
+    st.subheader("🏢 LOB-wise Trend Analysis")
+    
+    # LOB failure trends
+    lob_trend = filtered_df[filtered_df['Execution Status'] == 'Fail'].groupby(
+        ['Execution Date', 'LOB']
+    ).size().reset_index(name='Count')
+    
+    fig_lob = px.line(
+        lob_trend,
+        x='Execution Date',
+        y='Count',
+        color='LOB',
+        title='LOB-wise Failure Trends',
+        labels={'Count': 'Number of Failures'}
+    )
+    fig_lob.update_layout(template='plotly_white')
+    st.plotly_chart(fig_lob, use_container_width=True)
 
 def gap_analysis_tab(df):
     """Tab 3: Gap Analysis"""
     st.header("🔍 Gap Analysis")
     
+    # Filter failed test cases
+    failed_df = df[df['Execution Status'] == 'Fail']
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        # Top failing test cases
-        test_case_failures = df[df['Execution Status'] == 'Fail'].groupby('Test Case ID').size()
-        test_case_failures = test_case_failures.sort_values(ascending=False).head(10)
+        # Top failing test cases with defect types
+        test_case_failures = failed_df.groupby(['Test Case ID', 'Defect Type']).size().reset_index(name='Count')
+        test_case_failures = test_case_failures.sort_values('Count', ascending=False).head(10)
         
         fig_test_cases = px.bar(
-            x=test_case_failures.index,
-            y=test_case_failures.values,
-            title='Top 10 Frequently Failing Test Cases',
-            labels={'x': 'Test Case', 'y': 'Failure Count'}
+            test_case_failures,
+            x='Test Case ID',
+            y='Count',
+            color='Defect Type',
+            title='Top 10 Frequently Failing Test Cases by Defect Type',
+            labels={'Count': 'Failure Count'}
         )
-        st.plotly_chart(fig_test_cases)
+        fig_test_cases.update_layout(
+            template='plotly_white',
+            xaxis={'categoryorder': 'total descending'}
+        )
+        st.plotly_chart(fig_test_cases, use_container_width=True)
     
     with col2:
-        # User Story analysis
-        story_failures = df[df['Execution Status'] == 'Fail'].groupby('User Story').size()
-        story_failures = story_failures.sort_values(ascending=False).head(10)
+        # User Story analysis with severity
+        story_failures = failed_df.groupby(['User Story', 'Severity']).size().reset_index(name='Count')
+        story_failures = story_failures.sort_values('Count', ascending=False).head(10)
         
         fig_stories = px.bar(
-            x=story_failures.index,
-            y=story_failures.values,
-            title='Top 10 User Stories with Most Failures',
-            labels={'x': 'User Story', 'y': 'Failure Count'}
+            story_failures,
+            x='User Story',
+            y='Count',
+            color='Severity',
+            title='Top 10 User Stories with Most Failures by Severity',
+            labels={'Count': 'Failure Count'}
         )
-        st.plotly_chart(fig_stories)
+        fig_stories.update_layout(
+            template='plotly_white',
+            xaxis={'categoryorder': 'total descending'}
+        )
+        st.plotly_chart(fig_stories, use_container_width=True)
     
-    # Defect Status Analysis
-    st.subheader("Defect Resolution Analysis")
-    defect_status = df[df['Execution Status'] == 'Fail'].groupby(['LOB', 'Defect Status']).size().unstack(fill_value=0)
-    fig_status = px.bar(
-        defect_status,
-        title='Defect Status by LOB',
-        barmode='stack'
+    # Defect Resolution Analysis
+    st.subheader("📊 Defect Resolution Analysis")
+    
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        # Status distribution by severity
+        status_severity = failed_df.groupby(['Defect Status', 'Severity']).size().reset_index(name='Count')
+        
+        fig_status_severity = px.bar(
+            status_severity,
+            x='Defect Status',
+            y='Count',
+            color='Severity',
+            title='Defect Status Distribution by Severity',
+            labels={'Count': 'Number of Defects'}
+        )
+        fig_status_severity.update_layout(template='plotly_white')
+        st.plotly_chart(fig_status_severity, use_container_width=True)
+    
+    with col4:
+        # Priority distribution by status
+        priority_status = failed_df.groupby(['Priority', 'Defect Status']).size().reset_index(name='Count')
+        
+        fig_priority_status = px.bar(
+            priority_status,
+            x='Priority',
+            y='Count',
+            color='Defect Status',
+            title='Priority Distribution by Status',
+            labels={'Count': 'Number of Defects'}
+        )
+        fig_priority_status.update_layout(
+            template='plotly_white',
+            xaxis={'categoryorder': 'total descending'}
+        )
+        st.plotly_chart(fig_priority_status, use_container_width=True)
+    
+    # LOB Analysis
+    st.subheader("🏢 LOB-wise Analysis")
+    
+    col5, col6 = st.columns(2)
+    
+    with col5:
+        # LOB distribution by defect type
+        lob_defect = failed_df.groupby(['LOB', 'Defect Type']).size().reset_index(name='Count')
+        
+        fig_lob_defect = px.bar(
+            lob_defect,
+            x='LOB',
+            y='Count',
+            color='Defect Type',
+            title='LOB Distribution by Defect Type',
+            labels={'Count': 'Number of Defects'}
+        )
+        fig_lob_defect.update_layout(template='plotly_white')
+        st.plotly_chart(fig_lob_defect, use_container_width=True)
+    
+    with col6:
+        # LOB distribution by severity
+        lob_severity = failed_df.groupby(['LOB', 'Severity']).size().reset_index(name='Count')
+        
+        fig_lob_severity = px.bar(
+            lob_severity,
+            x='LOB',
+            y='Count',
+            color='Severity',
+            title='LOB Distribution by Severity',
+            labels={'Count': 'Number of Defects'}
+        )
+        fig_lob_severity.update_layout(template='plotly_white')
+        st.plotly_chart(fig_lob_severity, use_container_width=True)
+    
+    # Gap Matrix
+    st.subheader("📉 Gap Analysis Matrix")
+    
+    # Create gap matrix
+    gap_matrix = pd.crosstab(
+        [failed_df['LOB'], failed_df['Severity']],
+        [failed_df['Defect Type'], failed_df['Defect Status']]
+    ).fillna(0)
+    
+    # Flatten the matrix for visualization
+    gap_matrix_flat = gap_matrix.reset_index()
+    
+    # Create heatmap
+    fig_heatmap = px.imshow(
+        gap_matrix,
+        labels=dict(x="Defect Type & Status", y="LOB & Severity", color="Count"),
+        title="Comprehensive Gap Analysis Matrix",
+        aspect="auto"
     )
-    st.plotly_chart(fig_status, use_container_width=True)
-
-    # AI Analysis Section
-    if st.session_state.ai_analysis:
-        st.subheader("🤖 AI Gap Analysis")
-        
-        # Calculate test coverage metrics
-        test_coverage = df.groupby(['LOB', 'Test Case ID']).size().reset_index(name='execution_count')
-        lob_coverage = test_coverage.groupby('LOB').agg({
-            'Test Case ID': 'count',
-            'execution_count': 'sum'
-        }).reset_index()
-        
-        # Calculate defect patterns
-        defect_patterns = df[df['Execution Status'] == 'Fail'].groupby(['LOB', 'Defect Type', 'Defect Description']).size().reset_index(name='count')
-        defect_patterns = defect_patterns.sort_values('count', ascending=False).head(10)
-        
-        # Identify test cases with high failure rates
-        tc_failure_rates = df.groupby('Test Case ID').agg({
-            'Execution Status': lambda x: (x == 'Fail').mean() * 100
-        }).reset_index()
-        high_risk_tcs = tc_failure_rates[tc_failure_rates['Execution Status'] > 50].head(5)
-        
-        # Get uncovered scenarios (test cases with no recent executions)
-        recent_date = df['Execution Date'].max() - pd.Timedelta(days=30)
-        recent_executions = df[df['Execution Date'] > recent_date]['Test Case ID'].unique()
-        all_test_cases = df['Test Case ID'].unique()
-        uncovered_tcs = set(all_test_cases) - set(recent_executions)
-        
-        analysis_prompt = f"""
-        Based on the actual test execution data, here's the detailed gap analysis:
-
-        1. Test Coverage by LOB:
-        {lob_coverage.to_string()}
-
-        2. Top 10 Most Frequent Defect Patterns:
-        {defect_patterns.to_string()}
-
-        3. High-Risk Test Cases (>50% failure rate):
-        {high_risk_tcs.to_string()}
-
-        4. Test Cases Not Executed in Last 30 Days:
-        {list(uncovered_tcs)[:5]}  # Showing first 5 uncovered test cases
-
-        Please provide:
-        1. Specific coverage gaps in each LOB based on the execution data
-        2. Analysis of the most critical defect patterns and their impact
-        3. Recommendations for high-risk test cases showing consistent failures
-        4. Strategy for addressing untested scenarios in the last 30 days
-        5. Prioritized action items based on the actual data patterns
-        """
-        
-        with st.spinner("Generating gap analysis..."):
-            ai_insights = get_ai_analysis(analysis_prompt)
-            if ai_insights:
-                st.markdown(ai_insights)
+    fig_heatmap.update_layout(
+        template='plotly_white',
+        height=600
+    )
+    st.plotly_chart(fig_heatmap, use_container_width=True)
 
 def lob_analysis_tab(df):
     """Tab 4: LOB-Wise Failure Analysis"""
@@ -1179,6 +1510,8 @@ else:
         'Defect ID': ['', 'D_001'],
         'Defect Description': ['', 'Sample defect'],
         'Defect Type': ['', 'Automation'],
-        'Defect Status': ['', 'Open']
+        'Defect Status': ['', 'Open'],
+        'Severity': ['', 'High'],
+        'Priority': ['', 'P1']
     }
     st.dataframe(pd.DataFrame(sample_data)) 

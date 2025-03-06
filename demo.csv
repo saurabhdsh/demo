@@ -1,0 +1,121 @@
+Execution Date,User Story,Test Case ID,Test Case Name,LOB,Execution Status,Defect ID,Defect Type,Defect Description,Defect Status,Severity,Priority
+2024-12-15,Global Nav,TC_001,Test Case 1,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_002,Test Case 2,E&I,Fail,D4279,Data Issue,Issue with data issue in E&I,Open,High,P2
+2024-12-15,Global Nav,TC_003,Test Case 3,C&I,Fail,D1889,UI Element Issue,Issue with ui element issue in C&I,In Progress,Medium,P3
+2024-12-15,Global Nav,TC_004,Test Case 4,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_005,Test Case 5,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_006,Test Case 6,M&R,Fail,D1972,UI Element Issue,Issue with ui element issue in M&R,Open,Medium,P3
+2024-12-15,Global Nav,TC_007,Test Case 7,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_008,Test Case 8,C&I,Fail,D3481,UI Element Issue,Issue with ui element issue in C&I,Open,Medium,P3
+2024-12-15,Global Nav,TC_009,Test Case 9,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_010,Test Case 10,C&I,Fail,D8812,Environment,Issue with environment in C&I,Closed,Critical,P4
+2024-12-15,Global Nav,TC_011,Test Case 11,E&I,Fail,D9376,Environment,Issue with environment in E&I,Closed,Critical,P4
+2024-12-15,Global Nav,TC_012,Test Case 12,E&I,Fail,D3858,UI Element Issue,Issue with ui element issue in E&I,Closed,Medium,P4
+2024-12-15,Global Nav,TC_013,Test Case 13,C&I,Fail,D3009,Data Issue,Issue with data issue in C&I,In Progress,High,P2
+2024-12-15,Global Nav,TC_014,Test Case 14,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_015,Test Case 15,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_016,Test Case 16,C&I,Fail,D7669,Data Issue,Issue with data issue in C&I,In Progress,High,P2
+2024-12-15,Global Nav,TC_017,Test Case 17,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_018,Test Case 18,M&R,Fail,D4204,UI Element Issue,Issue with ui element issue in M&R,Open,Medium,P3
+2024-12-15,Global Nav,TC_019,Test Case 19,E&I,Fail,D9093,Environment,Issue with environment in E&I,In Progress,Critical,P1
+2024-12-15,Global Nav,TC_020,Test Case 20,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_021,Test Case 21,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_022,Test Case 22,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_023,Test Case 23,M&R,Fail,D9715,Data Issue,Issue with data issue in M&R,In Progress,High,P2
+2024-12-15,Global Nav,TC_024,Test Case 24,M&R,Fail,D8392,Environment,Issue with environment in M&R,Open,Critical,P1
+2024-12-15,Global Nav,TC_025,Test Case 25,M&R,Fail,D6606,UI Element Issue,Issue with ui element issue in M&R,In Progress,Medium,P3
+2024-12-15,Global Nav,TC_026,Test Case 26,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_027,Test Case 27,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_028,Test Case 28,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_029,Test Case 29,C&I,Fail,D6532,Data Issue,Issue with data issue in C&I,Open,High,P2
+2024-12-15,Global Nav,TC_030,Test Case 30,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_031,Test Case 31,E&I,Fail,D1524,UI Element Issue,Issue with ui element issue in E&I,Open,Medium,P3
+2024-12-15,Global Nav,TC_032,Test Case 32,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_033,Test Case 33,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_034,Test Case 34,E&I,Fail,D8281,Environment,Issue with environment in E&I,In Progress,Critical,P1
+2024-12-15,Global Nav,TC_035,Test Case 35,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_036,Test Case 36,M&R,Fail,D3066,Data Issue,Issue with data issue in M&R,In Progress,High,P2
+2024-12-15,Global Nav,TC_037,Test Case 37,E&I,Fail,D7689,Data Issue,Issue with data issue in E&I,In Progress,High,P2
+2024-12-15,Global Nav,TC_038,Test Case 38,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_039,Test Case 39,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_040,Test Case 40,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_041,Test Case 41,E&I,Fail,D8415,UI Element Issue,Issue with ui element issue in E&I,Open,Medium,P3
+2024-12-15,Global Nav,TC_042,Test Case 42,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_043,Test Case 43,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_044,Test Case 44,E&I,Fail,D3685,UI Element Issue,Issue with ui element issue in E&I,In Progress,Medium,P3
+2024-12-15,Global Nav,TC_045,Test Case 45,E&I,Fail,D3460,Environment,Issue with environment in E&I,Closed,Critical,P4
+2024-12-15,Global Nav,TC_046,Test Case 46,E&I,Fail,D9422,Environment,Issue with environment in E&I,Closed,Critical,P4
+2024-12-15,Global Nav,TC_047,Test Case 47,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_048,Test Case 48,E&I,Fail,D8893,UI Element Issue,Issue with ui element issue in E&I,Closed,Medium,P4
+2024-12-15,Global Nav,TC_049,Test Case 49,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_050,Test Case 50,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_051,Test Case 51,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_052,Test Case 52,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_053,Test Case 53,C&I,Fail,D6323,Data Issue,Issue with data issue in C&I,Open,High,P2
+2024-12-15,Global Nav,TC_054,Test Case 54,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_055,Test Case 55,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_056,Test Case 56,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_057,Test Case 57,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_058,Test Case 58,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_059,Test Case 59,M&R,Fail,D5537,Data Issue,Issue with data issue in M&R,In Progress,High,P2
+2024-12-15,Global Nav,TC_060,Test Case 60,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_061,Test Case 61,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_062,Test Case 62,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_063,Test Case 63,M&R,Fail,D8789,Environment,Issue with environment in M&R,Open,Critical,P1
+2024-12-15,Global Nav,TC_064,Test Case 64,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_065,Test Case 65,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_066,Test Case 66,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_067,Test Case 67,M&R,Fail,D6619,UI Element Issue,Issue with ui element issue in M&R,Open,Medium,P3
+2024-12-15,Global Nav,TC_068,Test Case 68,M&R,Fail,D1373,Data Issue,Issue with data issue in M&R,In Progress,High,P2
+2024-12-15,Global Nav,TC_069,Test Case 69,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_070,Test Case 70,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_071,Test Case 71,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_072,Test Case 72,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_073,Test Case 73,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_074,Test Case 74,M&R,Fail,D9082,Environment,Issue with environment in M&R,Closed,Critical,P4
+2024-12-15,Global Nav,TC_075,Test Case 75,C&I,Fail,D8278,Data Issue,Issue with data issue in C&I,In Progress,High,P2
+2024-12-15,Global Nav,TC_076,Test Case 76,E&I,Fail,D7558,Data Issue,Issue with data issue in E&I,Open,High,P2
+2024-12-15,Global Nav,TC_077,Test Case 77,E&I,Fail,D3545,Data Issue,Issue with data issue in E&I,Closed,High,P4
+2024-12-15,Global Nav,TC_078,Test Case 78,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_079,Test Case 79,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_080,Test Case 80,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_081,Test Case 81,C&I,Fail,D9185,UI Element Issue,Issue with ui element issue in C&I,Closed,Medium,P4
+2024-12-15,Global Nav,TC_082,Test Case 82,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_083,Test Case 83,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_084,Test Case 84,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_085,Test Case 85,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_086,Test Case 86,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_087,Test Case 87,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_088,Test Case 88,E&I,Fail,D8400,Data Issue,Issue with data issue in E&I,In Progress,High,P2
+2024-12-15,Global Nav,TC_089,Test Case 89,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_090,Test Case 90,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_091,Test Case 91,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_092,Test Case 92,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_093,Test Case 93,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_094,Test Case 94,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_095,Test Case 95,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_096,Test Case 96,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_097,Test Case 97,E&I,Fail,D3213,Data Issue,Issue with data issue in E&I,In Progress,High,P2
+2024-12-15,Global Nav,TC_098,Test Case 98,C&I,Fail,D5257,UI Element Issue,Issue with ui element issue in C&I,Open,Medium,P3
+2024-12-15,Global Nav,TC_099,Test Case 99,C&I,Fail,D4727,UI Element Issue,Issue with ui element issue in C&I,Closed,Medium,P4
+2024-12-15,Global Nav,TC_100,Test Case 100,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_101,Test Case 101,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_102,Test Case 102,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_103,Test Case 103,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_104,Test Case 104,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_105,Test Case 105,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_106,Test Case 106,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_107,Test Case 107,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_108,Test Case 108,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_109,Test Case 109,C&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_110,Test Case 110,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_111,Test Case 111,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_112,Test Case 112,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_113,Test Case 113,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_114,Test Case 114,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_115,Test Case 115,M&R,Pass,,,,,,
+2024-12-15,Global Nav,TC_116,Test Case 116,E&I,Fail,D9758,UI Element Issue,Issue with ui element issue in E&I,Open,Medium,P3
+2024-12-15,Global Nav,TC_117,Test Case 117,M&R,Fail,D1621,UI Element Issue,Issue with ui element issue in M&R,In Progress,Medium,P3
+2024-12-15,Global Nav,TC_118,Test Case 118,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_119,Test Case 119,E&I,Pass,,,,,,
+2024-12-15,Global Nav,TC_120,Test Case 120,E&I,Pass,,,,,,
