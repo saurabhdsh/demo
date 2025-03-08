@@ -1684,74 +1684,108 @@ def beautiful_prompt_section(context: Optional[str] = None, analysis_function: O
             "root_cause": "Ask about root causes and solutions..."
         }.get(context, "Ask a question about the analysis...")
         
-        # Add JavaScript to preserve input after submission
+        # Initialize session state for this context if it doesn't exist
+        input_key = f"input_{context if context else 'general'}"
+        if input_key not in st.session_state:
+            st.session_state[input_key] = ""
+        
+        # Create a form to handle the input submission
+        with st.form(key=f"chat_form_{context if context else 'general'}", clear_on_submit=False):
+            # Use text_input instead of chat_input to have more control
+            user_input = st.text_input(
+                "",
+                value=st.session_state[input_key],
+                placeholder=placeholder_text,
+                key=f"text_{input_key}",
+                label_visibility="collapsed"
+            )
+            
+            # Create a custom submit button that looks like a send button
+            col1, col2 = st.columns([6, 1])
+            with col2:
+                submitted = st.form_submit_button("Send")
+        
+        # Apply custom CSS to make it look like our design
         st.markdown(
             """
-            <script>
-            // Store the input value in session storage when it changes
-            document.addEventListener('DOMContentLoaded', function() {
-                // Wait for Streamlit to fully load
-                setTimeout(function() {
-                    const chatInputs = document.querySelectorAll('.stChatInput input');
-                    chatInputs.forEach(input => {
-                        // Set initial value from session storage if exists
-                        const storedValue = sessionStorage.getItem(input.id);
-                        if (storedValue) {
-                            input.value = storedValue;
-                        }
-                        
-                        // Store value when it changes
-                        input.addEventListener('input', function() {
-                            sessionStorage.setItem(this.id, this.value);
-                        });
-                        
-                        // Clear storage when form is submitted
-                        const form = input.closest('form');
-                        if (form) {
-                            form.addEventListener('submit', function() {
-                                // Don't clear the input value
-                                setTimeout(function() {
-                                    input.value = sessionStorage.getItem(input.id);
-                                }, 100);
-                            });
-                        }
-                    });
-                }, 1000);
-            });
-            </script>
+            <style>
+            /* Style the form to look like chat input */
+            .stForm {
+                background-color: transparent !important;
+                border: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            
+            /* Hide the form border */
+            .stForm > div {
+                border: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            
+            /* Style the text input */
+            .stTextInput > div > div > input {
+                border-radius: 50px !important;
+                border: 1px solid #e9ecef !important;
+                background-color: #f8f9fa !important;
+                padding: 8px 16px !important;
+            }
+            
+            /* Style the submit button */
+            .stForm button {
+                border-radius: 50% !important;
+                width: 40px !important;
+                height: 40px !important;
+                padding: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                background-color: #f8f9fa !important;
+                border: 1px solid #e9ecef !important;
+                color: #2e6fdb !important;
+                font-size: 20px !important;
+                line-height: 1 !important;
+            }
+            
+            .stForm button:hover {
+                background-color: #e9ecef !important;
+            }
+            
+            /* Hide the label */
+            .stTextInput label {
+                display: none !important;
+            }
+            </style>
             """,
             unsafe_allow_html=True
         )
         
-        # Use Streamlit's chat_input
-        user_input = st.chat_input(placeholder=placeholder_text, key=f"chat_input_{context if context else 'general'}")
-        
-        # Process the input
-        if user_input and analysis_function and st.session_state.data is not None:
-            with st.spinner(""):
-                try:
-                    # Store the current input in session state to preserve it
-                    if f"prev_input_{context}" not in st.session_state:
-                        st.session_state[f"prev_input_{context}"] = ""
-                    st.session_state[f"prev_input_{context}"] = user_input
-                    
-                    # Prepare data for context
-                    metrics = truncate_data_for_context(st.session_state.data)
-                    
-                    # Create focused prompt
-                    prompt = create_analysis_prompt(context or "general", metrics, user_input)
-                    
-                    # Get AI response
-                    response = analysis_function(prompt)
-                    
-                    if response:
-                        st.markdown('<div class="chat-response">', unsafe_allow_html=True)
-                        st.markdown(response)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    else:
-                        st.error("Unable to generate analysis. Please try again.")
-                except Exception as e:
-                    st.error(f"Error during analysis: {str(e)}")
+        # Process the input when the form is submitted
+        if submitted and user_input:
+            # Store the input in session state
+            st.session_state[input_key] = user_input
+            
+            if analysis_function and st.session_state.data is not None:
+                with st.spinner(""):
+                    try:
+                        # Prepare data for context
+                        metrics = truncate_data_for_context(st.session_state.data)
+                        
+                        # Create focused prompt
+                        prompt = create_analysis_prompt(context or "general", metrics, user_input)
+                        
+                        # Get AI response
+                        response = analysis_function(prompt)
+                        
+                        if response:
+                            st.markdown('<div class="chat-response">', unsafe_allow_html=True)
+                            st.markdown(response)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                        else:
+                            st.error("Unable to generate analysis. Please try again.")
+                    except Exception as e:
+                        st.error(f"Error during analysis: {str(e)}")
         
         st.markdown('</div>', unsafe_allow_html=True)
 
