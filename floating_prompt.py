@@ -28,63 +28,6 @@ def floating_prompt_section(context: Optional[str] = None, analysis_function: Op
         font-family: 'Arial', sans-serif;
     }
     
-    /* Input container styling - Oval shape */
-    .input-container {
-        display: flex;
-        align-items: center;
-        background-color: #f8f9fa;
-        border-radius: 50px;
-        padding: 8px 16px;
-        margin-top: 10px;
-        border: 1px solid #e9ecef;
-        transition: all 0.3s ease;
-        position: relative;
-    }
-    
-    .input-container:hover {
-        border-color: #adb5bd;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    }
-    
-    /* Input field styling */
-    .chat-input {
-        flex-grow: 1;
-        border: none;
-        background: transparent;
-        padding: 8px 40px 8px 8px;
-        font-size: 14px;
-        color: #212529;
-        outline: none;
-        width: calc(100% - 48px);
-    }
-    
-    /* Send button styling - Positioned inside the input */
-    .send-button {
-        background: none;
-        border: none;
-        padding: 8px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: transform 0.2s ease;
-        position: absolute;
-        right: 8px;
-        top: 50%;
-        transform: translateY(-50%);
-    }
-    
-    .send-button:hover {
-        transform: translateY(-50%) scale(1.1);
-    }
-    
-    /* Arrow icon styling */
-    .arrow-icon {
-        width: 20px;
-        height: 20px;
-        fill: #2e6fdb;
-    }
-    
     .chat-response {
         margin-top: 15px;
         padding: 15px;
@@ -97,31 +40,38 @@ def floating_prompt_section(context: Optional[str] = None, analysis_function: Op
         color: #212529;
         border: 1px solid #e9ecef;
     }
+    
+    /* Custom styling for chat input */
+    .stChatInput {
+        margin-top: 10px;
+    }
+    
+    .stChatInput > div {
+        border-radius: 50px !important;
+        border: 1px solid #e9ecef !important;
+        background-color: #f8f9fa !important;
+    }
+    
+    .stChatInput input {
+        border-radius: 50px !important;
+    }
+    
+    .stChatInput button {
+        border-radius: 50% !important;
+        width: 32px !important;
+        height: 32px !important;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background-color: #f8f9fa !important;
+        border: none !important;
+        color: #2e6fdb !important;
+    }
     </style>
     """, unsafe_allow_html=True)
    
     with st.container():
-        # Add CSS to hide the Streamlit input
-        st.markdown(
-            """
-            <style>
-            /* Hide the default Streamlit input */
-            .stTextInput {
-                position: absolute;
-                left: -9999px;
-                width: 1px;
-                height: 1px;
-                overflow: hidden;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        # Create a hidden text input to capture the user's query
-        input_key = f"hidden_input_{context if context else 'general'}"
-        user_input = st.text_input("", key=input_key, label_visibility="collapsed")
-        
         st.markdown('<div class="floating-chat">', unsafe_allow_html=True)
         
         # Add context-specific placeholder text
@@ -139,72 +89,8 @@ def floating_prompt_section(context: Optional[str] = None, analysis_function: Op
         elif context == "root_cause":
             placeholder = "Ask about root causes and solutions..."
         
-        # Create input container with send button
-        st.markdown(
-            f'''
-            <div class="input-container">
-                <input type="text" class="chat-input" 
-                    placeholder="{placeholder}" 
-                    id="chat_input_{context if context else 'general'}"
-                    onkeyup="updateHiddenInput(this.value, '{input_key}')"
-                />
-                <button class="send-button" onclick="submitForm('{input_key}')">
-                    {create_send_button_html()}
-                </button>
-            </div>
-            ''',
-            unsafe_allow_html=True
-        )
-        
-        # Add JavaScript for handling input and button click
-        st.markdown(
-            f'''
-            <script>
-            // Function to update the hidden Streamlit input
-            function updateHiddenInput(value, inputKey) {{
-                // Find the Streamlit input element
-                const streamlitDoc = window.parent.document;
-                const hiddenInput = streamlitDoc.querySelector('input[aria-label="{input_key}"]');
-                if (hiddenInput) {{
-                    hiddenInput.value = value;
-                }}
-                
-                // Handle Enter key
-                if (event && event.key === 'Enter') {{
-                    submitForm('{input_key}');
-                }}
-            }}
-            
-            // Function to submit the form
-            function submitForm(inputKey) {{
-                // Get the value from the visible input
-                const chatInput = document.querySelector('.chat-input');
-                const value = chatInput.value;
-                
-                if (value.trim() !== '') {{
-                    // Find the Streamlit input element
-                    const streamlitDoc = window.parent.document;
-                    const hiddenInput = streamlitDoc.querySelector('input[aria-label="{input_key}"]');
-                    
-                    if (hiddenInput) {{
-                        // Set the value
-                        hiddenInput.value = value;
-                        
-                        // Find and click the submit button
-                        const submitButton = hiddenInput.nextElementSibling;
-                        if (submitButton) {{
-                            submitButton.click();
-                            
-                            // Clear the visible input
-                            chatInput.value = '';
-                        }}
-                    }}
-                }}
-            }}
-            </script>
-            ''',
-            unsafe_allow_html=True
-        )
+        # Use Streamlit's chat_input
+        user_input = st.chat_input(placeholder=placeholder, key=f"chat_input_{context if context else 'general'}")
         
         # Process the input
         if user_input and analysis_function:
