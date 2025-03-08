@@ -1,90 +1,16 @@
 import streamlit as st
 from typing import Optional, Callable
 import pandas as pd
-
-def truncate_data_for_context(df: pd.DataFrame) -> dict:
-    """Prepare and truncate data for OpenAI context"""
-    if df is None or len(df) == 0:
-        return {}
-        
-    # Get only failed test cases for analysis
-    failed_df = df[df['Execution Status'] == 'Fail'].copy()
-    
-    # Get the most recent 20 failures
-    recent_failures = failed_df.nlargest(20, 'Execution Date')
-    
-    # Calculate key metrics
-    total_tests = len(df)
-    total_failures = len(failed_df)
-    failure_rate = (total_failures / total_tests * 100) if total_tests > 0 else 0
-    
-    metrics = {
-        'total_tests': total_tests,
-        'total_failures': total_failures,
-        'failure_rate': failure_rate,
-        'recent_failures': len(recent_failures),
-        'defect_types': failed_df['Defect Type'].value_counts().to_dict(),
-        'severity_dist': failed_df['Severity'].value_counts().to_dict(),
-        'priority_dist': failed_df['Priority'].value_counts().to_dict(),
-        'status_dist': failed_df['Defect Status'].value_counts().to_dict(),
-        'lob_dist': failed_df['LOB'].value_counts().to_dict(),
-        'recent_issues': recent_failures[[
-            'Test Case ID', 
-            'Defect Type', 
-            'Severity', 
-            'Priority', 
-            'Defect Status',
-            'Defect Description'
-        ]].to_dict('records')
-    }
-    
-    return metrics
-
-def create_analysis_prompt(context: str, metrics: dict, user_query: str) -> str:
-    """Create a focused prompt for OpenAI analysis"""
-    # Create context-specific focus
-    context_focus = {
-        "failure": "failure patterns and root causes",
-        "trend": "trends and patterns over time",
-        "gap": "testing gaps and areas needing attention",
-        "lob": "LOB-specific performance and issues",
-        "predictive": "predictions and future risks"
-    }.get(context, "general analysis")
-    
-    base_prompt = f"""As a QA expert, analyze the following test failure data focusing on {context_focus}.
-
-Current Metrics:
-- Total Tests: {metrics.get('total_tests', 0)}
-- Total Failures: {metrics.get('total_failures', 0)}
-- Failure Rate: {metrics.get('failure_rate', 0):.2f}%
-- Recent Failures: {metrics.get('recent_failures', 0)}
-
-Distribution Summary:
-- Defect Types: {metrics.get('defect_types', {})}
-- Severity: {metrics.get('severity_dist', {})}
-- Priority: {metrics.get('priority_dist', {})}
-- Status: {metrics.get('status_dist', {})}
-- LOB Distribution: {metrics.get('lob_dist', {})}
-
-Recent Critical Issues:
-{str(metrics.get('recent_issues', [])[:5])}
-
-User Question: {user_query}
-
-Please provide a detailed analysis including:
-1. Direct answer to the user's question
-2. Key insights from the relevant metrics
-3. Specific patterns or trends identified
-4. Actionable recommendations
-5. Risk assessment if applicable
-
-Format your response in markdown with appropriate headers and bullet points."""
-
-    return base_prompt
+ 
+def create_send_button_html():
+    """Create HTML for the send button with arrow icon"""
+    return """<svg class="arrow-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+    </svg>"""
 
 def floating_prompt_section(context: Optional[str] = None, analysis_function: Optional[Callable] = None):
     """Create floating prompt section with optional context"""
-    
+   
     # Add floating prompt CSS
     st.markdown("""
     <style>
@@ -92,79 +18,232 @@ def floating_prompt_section(context: Optional[str] = None, analysis_function: Op
         position: fixed;
         left: 20px;
         bottom: 20px;
-        width: 300px;
+        width: 350px;
         background-color: white;
         padding: 15px;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        border-radius: 15px;
+        box-shadow: 0 6px 24px rgba(0,0,0,0.12);
         z-index: 1000;
-        border: 1px solid #e0e0e0;
+        border: 1px solid #f0f0f0;
+        font-family: 'Arial', sans-serif;
     }
-    .chat-response {
+    
+    /* Input container styling - Oval shape */
+    .input-container {
+        display: flex;
+        align-items: center;
+        background-color: #f8f9fa;
+        border-radius: 50px;
+        padding: 8px 16px;
         margin-top: 10px;
-        padding: 10px;
-        border-radius: 8px;
-        background-color: #f7f7f7;
-        max-height: 200px;
-        overflow-y: auto;
+        border: 1px solid #e9ecef;
+        transition: all 0.3s ease;
+        position: relative;
     }
+    
+    .input-container:hover {
+        border-color: #adb5bd;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    /* Input field styling */
     .chat-input {
-        margin-bottom: 10px;
+        flex-grow: 1;
+        border: none;
+        background: transparent;
+        padding: 8px 40px 8px 8px;
+        font-size: 14px;
+        color: #212529;
+        outline: none;
+        width: calc(100% - 48px);
     }
-    .chat-button {
-        width: 100%;
-        margin-top: 5px;
+    
+    /* Send button styling - Positioned inside the input */
+    .send-button {
+        background: none;
+        border: none;
+        padding: 8px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.2s ease;
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    
+    .send-button:hover {
+        transform: translateY(-50%) scale(1.1);
+    }
+    
+    /* Arrow icon styling */
+    .arrow-icon {
+        width: 20px;
+        height: 20px;
+        fill: #2e6fdb;
+    }
+    
+    .chat-response {
+        margin-top: 15px;
+        padding: 15px;
+        border-radius: 12px;
+        background-color: #f8f9fa;
+        max-height: 250px;
+        overflow-y: auto;
+        font-size: 14px;
+        line-height: 1.5;
+        color: #212529;
+        border: 1px solid #e9ecef;
     }
     </style>
     """, unsafe_allow_html=True)
-    
+   
     with st.container():
         st.markdown('<div class="floating-chat">', unsafe_allow_html=True)
         
         # Add context-specific placeholder text
-        placeholder_text = {
-            "failure": "Ask about failure patterns, defect types, or specific issues...",
-            "trend": "Ask about trends, patterns over time, or specific date ranges...",
-            "gap": "Ask about gaps in testing, coverage, or specific areas...",
-            "lob": "Ask about specific LOB performance, issues, or comparisons...",
-            "predictive": "Ask about predictions, future trends, or risk areas..."
-        }.get(context, "Ask a question about the analysis...")
+        placeholder = "Ask about test failures, defects, or trends..."
+        if context == "failure":
+            placeholder = "Ask about failure patterns, defect types, or severity distribution..."
+        elif context == "trend":
+            placeholder = "Ask about failure trends, historical patterns, or predictions..."
+        elif context == "gap":
+            placeholder = "Ask about testing gaps, coverage issues, or improvement areas..."
+        elif context == "lob":
+            placeholder = "Ask about specific LOB performance, issues, or comparisons..."
+        elif context == "predictive":
+            placeholder = "Ask about future trends, risk areas, or potential issues..."
+        elif context == "root_cause":
+            placeholder = "Ask about root causes and solutions..."
         
-        user_input = st.text_input(
-            "",
-            placeholder=placeholder_text,
-            key=f"chat_input_{context}" if context else "chat_input",
-            help="Type your question and press Enter or click Ask"
+        # Create a hidden text input to capture the user's query
+        input_key = f"hidden_input_{context if context else 'general'}"
+        user_input = st.text_input("", key=input_key, label_visibility="collapsed")
+        
+        # Create input container with send button
+        st.markdown(
+            f'''
+            <div class="input-container">
+                <input type="text" class="chat-input" 
+                    placeholder="{placeholder}" 
+                    id="chat_input_{context if context else 'general'}"
+                    onkeyup="updateHiddenInput(this.value, '{input_key}')"
+                />
+                <button class="send-button" onclick="submitForm('{input_key}')">
+                    {create_send_button_html()}
+                </button>
+            </div>
+            ''',
+            unsafe_allow_html=True
         )
         
-        if st.button("Ask", key=f"ask_button_{context}" if context else "ask_button", use_container_width=True):
-            if user_input and analysis_function and st.session_state.data is not None:
-                with st.spinner("Analyzing..."):
-                    try:
-                        # Prepare data for context
-                        metrics = truncate_data_for_context(st.session_state.data)
+        # Add JavaScript for handling input and button click
+        st.markdown(
+            f'''
+            <script>
+            // Function to update the hidden Streamlit input
+            function updateHiddenInput(value, inputKey) {{
+                // Find the Streamlit input element
+                const streamlitDoc = window.parent.document;
+                const hiddenInput = streamlitDoc.querySelector('input[aria-label="{input_key}"]');
+                if (hiddenInput) {{
+                    hiddenInput.value = value;
+                }}
+                
+                // Handle Enter key
+                if (event && event.key === 'Enter') {{
+                    submitForm('{input_key}');
+                }}
+            }}
+            
+            // Function to submit the form
+            function submitForm(inputKey) {{
+                // Get the value from the visible input
+                const chatInput = document.querySelector('.chat-input');
+                const value = chatInput.value;
+                
+                if (value.trim() !== '') {{
+                    // Find the Streamlit input element
+                    const streamlitDoc = window.parent.document;
+                    const hiddenInput = streamlitDoc.querySelector('input[aria-label="{input_key}"]');
+                    
+                    if (hiddenInput) {{
+                        // Set the value
+                        hiddenInput.value = value;
                         
-                        # Create focused prompt
-                        prompt = create_analysis_prompt(context or "general", metrics, user_input)
-                        
-                        # Get AI response
-                        response = analysis_function(prompt)
-                        
-                        if response:
-                            st.markdown('<div class="chat-response">', unsafe_allow_html=True)
-                            st.markdown(response)
-                            st.markdown('</div>', unsafe_allow_html=True)
-                        else:
-                            st.error("Unable to generate analysis. Please try again.")
-                    except Exception as e:
-                        st.error(f"Error during analysis: {str(e)}")
-            elif st.session_state.data is None:
-                st.warning("Please upload data first to use the AI analysis feature.")
-            elif not user_input:
-                st.warning("Please enter a question to analyze.")
+                        // Find and click the submit button
+                        const submitButton = hiddenInput.nextElementSibling;
+                        if (submitButton) {{
+                            submitButton.click();
+                            
+                            // Clear the visible input
+                            chatInput.value = '';
+                        }}
+                    }}
+                }}
+            }}
+            </script>
+            ''',
+            unsafe_allow_html=True
+        )
         
+        # Process the input
+        if user_input and analysis_function:
+            with st.spinner("Analyzing..."):
+                response = analysis_function(user_input)
+                if response:
+                    st.markdown(f"<div class='chat-response'>{response}</div>", unsafe_allow_html=True)
+       
         st.markdown('</div>', unsafe_allow_html=True)
-
+ 
 def add_floating_prompt_to_tab(tab_name: str, analysis_function: Optional[Callable] = None):
     """Add floating prompt with context to a specific tab"""
-    floating_prompt_section(tab_name.lower(), analysis_function) 
+    context_map = {
+        "failure": "failure",
+        "trend": "trend",
+        "gap": "gap",
+        "lob": "lob",
+        "predictive": "predictive",
+        "root_cause": "root_cause"
+    }
+    floating_prompt_section(context_map.get(tab_name.lower()), analysis_function)
+ 
+def truncate_data_for_context(df: pd.DataFrame) -> dict:
+    """Prepare and truncate data for OpenAI context"""
+    if df is None or len(df) == 0:
+        return {}
+ 
+    # Get only failed test cases for analysis
+    failed_df = df[df['Execution Status'] == 'Fail'].copy()
+    # Get the most recent 20 failures - This limits the data volume
+    recent_failures = failed_df.nlargest(20, 'Execution Date')
+ 
+    # Calculate key metrics - This summarizes data instead of sending raw data
+    total_tests = len(df)
+    total_failures = len(failed_df)
+ 
+    metrics = {
+        'total_tests': total_tests,
+        'total_failures': total_failures,
+        'failure_rate': (total_failures / total_tests * 100) if total_tests > 0 else 0,
+        'recent_failures': len(recent_failures),
+ 
+        # Using value_counts().to_dict() creates summaries instead of raw data
+        'defect_types': failed_df['Defect Type'].value_counts().to_dict(),
+        'severity_dist': failed_df['Severity'].value_counts().to_dict() if 'Severity' in failed_df.columns else {},
+        'priority_dist': failed_df['Priority'].value_counts().to_dict() if 'Priority' in failed_df.columns else {},
+        'status_dist': failed_df['Defect Status'].value_counts().to_dict(),
+        'lob_dist': failed_df['LOB'].value_counts().to_dict(),
+ 
+        # Only sending essential columns and limiting to recent issues
+        'recent_issues': recent_failures[[
+            'Test Case ID',
+            'Defect Type',
+            'Defect Status',
+            'Defect Description'
+        ]].to_dict('records')[:5]  # Further limiting to only 5 recent issues
+    }
+    
+    return metrics

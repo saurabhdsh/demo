@@ -1,4 +1,12 @@
 import streamlit as st
+
+# Configure page settings
+st.set_page_config(
+    page_title="QA Failure Analysis Dashboard",
+    page_icon="🔍",
+    layout="wide"
+)
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -9,359 +17,310 @@ import os
 from dotenv import load_dotenv
 import openai
 from functools import reduce
+from azure.identity import ClientSecretCredential, get_bearer_token_provider
+from azure.keyvault.secrets import SecretClient
 
 # Load environment variables
 load_dotenv()
 
-# Configure page settings
-st.set_page_config(
-    page_title="QA Failure Analysis Dashboard",
-    page_icon="🔍",
-    layout="wide"
-)
-
-# Custom CSS for floating prompt
-st.markdown("""
-<style>
-.floating-chat {
-    position: fixed;
-    left: 20px;
-    bottom: 20px;
-    width: 300px;
-    background-color: white;
-    padding: 15px;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    z-index: 1000;
-    border: 1px solid #e0e0e0;
-}
-.chat-response {
-    margin-top: 10px;
-    padding: 10px;
-    border-radius: 8px;
-    background-color: #f7f7f7;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-/* Defect Item Styling */
-.defect-item {
-    padding: 12px;
-    margin: 10px 0;
-    background: rgba(255, 255, 255, 0.8);
-    border-radius: 8px;
-    border: 1px solid #eaecef;
-}
-
-.defect-item p {
-    margin: 5px 0;
-}
-
-.status-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.85em;
-    font-weight: 500;
-    background: #e9ecef;
-    color: #495057;
-}
-
-.test-case {
-    font-size: 0.9em;
-    color: #6c757d;
-}
-
-/* Enhanced Card Styles */
-.response-card {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    max-width: 800px;
-    margin: 20px auto;
-    padding: 0;
-}
-
-.title-section {
-    background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
-    color: white;
-    padding: 12px 16px;
-    border-radius: 8px;
-    margin-bottom: 12px;
-}
-
-.title-section h1 {
-    font-size: 1.1em;
-    margin: 0;
-    font-weight: 600;
-}
-
-.title-section h2 {
-    font-size: 0.9em;
-    opacity: 0.9;
-    margin: 4px 0 0 0;
-}
-
-.metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 10px;
-    margin-bottom: 12px;
-}
-
-.metric-card {
-    background: white;
-    padding: 12px;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    border: 1px solid #f0f0f0;
-}
-
-.metric-label {
-    color: #64748b;
-    font-size: 0.75em;
-    margin-bottom: 4px;
-}
-
-.metric-value {
-    font-size: 1.1em;
-    font-weight: 600;
-    background: linear-gradient(45deg, #2563eb, #3b82f6);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.distribution-section {
-    background: white;
-    padding: 16px;
-    border-radius: 8px;
-    margin: 16px 0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-
-.distribution-title {
-    color: #1e293b;
-    font-size: 0.9em;
-    font-weight: 600;
-    margin-bottom: 12px;
-}
-
-.distribution-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px;
-    margin: 6px 0;
-    background: #f8fafc;
-    border-radius: 6px;
-    font-size: 0.8em;
-}
-
-.distribution-item span:last-child {
-    font-weight: 500;
-    color: #2563eb;
-}
-
-.recommendations-section {
-    background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
-    color: white;
-    padding: 16px;
-    border-radius: 8px;
-    margin-top: 16px;
-}
-
-.recommendations-title {
-    font-size: 0.9em;
-    font-weight: 600;
-    margin-bottom: 12px;
-    opacity: 0.9;
-}
-
-.recommendations-list {
-    margin: 0;
-    padding-left: 16px;
-}
-
-.recommendations-list li {
-    margin: 8px 0;
-    font-size: 0.8em;
-    line-height: 1.4;
-    opacity: 0.9;
-}
-
-/* Statistics Styling */
-.metric-value {
-    background: linear-gradient(45deg, #3498db, #2ecc71);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    font-weight: 700;
-}
-
-/* Emoji Styling */
-.response-card h1 emoji, .response-card h2 emoji {
-    font-size: 1.2em;
-    margin-right: 8px;
-}
-
-/* Distribution Values */
-.distribution-value {
-    font-family: 'Monaco', 'Menlo', monospace;
-    font-size: 0.9em;
-    color: #6c757d;
-    background: #f8f9fa;
-    padding: 2px 6px;
-    border-radius: 4px;
-}
-
-/* LOB Analysis Specific Styles */
-.lob-stats {
-    padding: 15px;
-    background: rgba(255, 255, 255, 0.7);
-    border-radius: 8px;
-    margin: 10px 0;
-}
-
-.lob-stats p {
-    font-size: 1.1em;
-    margin-bottom: 15px;
-}
-
-.defect-breakdown {
-    margin-top: 15px;
-}
-
-.defect-breakdown h3 {
-    color: #2c3e50;
-    font-size: 1em;
-    margin: 15px 0 10px 0;
-    padding-bottom: 5px;
-    border-bottom: 1px solid #eaecef;
-}
-
-.defect-breakdown ul {
-    list-style: none;
-    padding-left: 0;
-    margin-bottom: 20px;
-}
-
-.defect-breakdown li {
-    margin: 8px 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 5px 10px;
-    background: rgba(255, 255, 255, 0.5);
-    border-radius: 6px;
-}
-
-.defect-type {
-    font-weight: 500;
-    color: #2c3e50;
-    padding: 2px 8px;
-    background: #e9ecef;
-    border-radius: 12px;
-    font-size: 0.9em;
-}
-
-/* Enhanced Card Styles for LOB Analysis */
-.success-card {
-    border-left: 4px solid #2ecc71;
-    background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(255, 255, 255, 0.9));
-}
-
-.info-card {
-    border-left: 4px solid #3498db;
-    background: linear-gradient(135deg, rgba(52, 152, 219, 0.1), rgba(255, 255, 255, 0.9));
-}
-
-.warning-card {
-    border-left: 4px solid #f1c40f;
-    background: linear-gradient(135deg, rgba(241, 196, 15, 0.1), rgba(255, 255, 255, 0.9));
-}
-
-/* Metric Value Enhancement */
-.metric-value {
-    font-size: 1.4em;
-    font-weight: 700;
-    background: linear-gradient(45deg, #2c3e50, #3498db);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    padding-right: 5px;
-}
-
-/* Status Badge Enhancement */
-.status-badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 12px;
-    font-size: 0.85em;
-    font-weight: 500;
-    background: #e9ecef;
-    color: #495057;
-    margin-right: 8px;
-}
-
-.status-badge.open {
-    background: #fee2e2;
-    color: #dc2626;
-}
-
-.status-badge.closed {
-    background: #dcfce7;
-    color: #16a34a;
-}
-
-.status-badge.in-progress {
-    background: #fef3c7;
-    color: #d97706;
-}
-
-/* Key Findings Enhancement */
-.warning-card ul {
-    padding-left: 20px;
-}
-
-.warning-card li {
-    margin: 10px 0;
-    line-height: 1.6;
-    color: #2c3e50;
-}
-
-/* Responsive Adjustments */
-@media (max-width: 768px) {
-    .lob-stats {
-        padding: 10px;
-    }
+# Initialize Azure OpenAI client
+try:
+    # Connect to Key Vault
+    KEY_VAULT_NAME = "kv-uais-nonprod"
+    KV_URI = f"https://{KEY_VAULT_NAME}.vault.azure.net/"
     
-    .metric-value {
-        font-size: 1.2em;
-    }
+    # Use environment variables for initial connection
+    credential = ClientSecretCredential(
+        tenant_id=os.getenv('APP_TENANT_ID'),
+        client_id=os.getenv('APP_CLIENT_ID'),
+        client_secret=os.getenv('APP_CLIENT_SECRET'),
+        additionally_allowed_tenants=["*"]
+    )
     
-    .defect-breakdown li {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-}
-</style>
-""", unsafe_allow_html=True)
+    # Create Key Vault client
+    secret_client = SecretClient(
+        vault_url=KV_URI,
+        credential=credential
+    )
+    
+    # Get Azure credentials from vault
+    az_cred = ClientSecretCredential(
+        tenant_id=secret_client.get_secret("secret-uais-tenant-id").value,
+        client_id=secret_client.get_secret("secret-client-id-uais").value,
+        client_secret=secret_client.get_secret("secret-client-secret-uais").value
+    )
+    
+    # Get the bearer token provider
+    token_provider = get_bearer_token_provider(az_cred, "https://cognitiveservices.azure.com/.default")
+    
+    # Azure OpenAI settings
+    AZURE_OPENAI_ENDPOINT = "https://prod-1.services.unitedaistudio.uhg.com/aoai-shared-openai-prod-1"
+    DEPLOYMENT_NAME = "gpt-4o_2024-05-13"
+    
+    # Initialize the OpenAI client
+    ai_client = openai.AzureOpenAI(
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        api_version="2024-06-01",
+        azure_deployment=DEPLOYMENT_NAME,
+        azure_ad_token_provider=token_provider,
+        default_headers={
+            "projectId": secret_client.get_secret("secret-client-project-uais").value
+        }
+    )
+except Exception as e:
+    st.error(f"Error initializing Azure OpenAI client: {str(e)}")
+    ai_client = None
 
 # Initialize session state
 if 'data' not in st.session_state:
     st.session_state.data = None
 if 'ai_analysis' not in st.session_state:
     st.session_state.ai_analysis = False
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
 
-# Initialize OpenAI client at the start of the script
-if 'openai_client' not in st.session_state:
-    try:
-        st.session_state.openai_client = openai.OpenAI(
-            api_key=os.getenv('OPENAI_API_KEY')
-        )
-    except Exception as e:
-        st.warning(f"OpenAI client initialization failed: {str(e)}")
-        st.session_state.openai_client = None
+# Add custom CSS for beautiful prompt
+st.markdown("""
+<style>
+/* Main container styling */
+.beautiful-chat {
+    position: fixed;
+    left: 20px;
+    bottom: 20px;
+    width: 350px;
+    background-color: white;
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+    z-index: 1000;
+    border: 1px solid #f0f0f0;
+    font-family: 'Arial', sans-serif;
+}
+
+/* Input container styling */
+.input-container {
+    display: flex;
+    align-items: center;
+    background-color: #f8f9fa;
+    border-radius: 12px;
+    padding: 8px 16px;
+    margin-top: 10px;
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.input-container:hover {
+    border-color: #adb5bd;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+/* Input field styling */
+.chat-input {
+    flex-grow: 1;
+    border: none;
+    background: transparent;
+    padding: 8px;
+    font-size: 14px;
+    color: #212529;
+    outline: none;
+}
+
+/* Send button styling */
+.send-button {
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+.send-button:hover {
+    transform: scale(1.1);
+}
+
+/* Arrow icon styling */
+.arrow-icon {
+    width: 20px;
+    height: 20px;
+    fill: #212529;
+}
+
+/* Response container styling */
+.chat-response {
+    margin-top: 15px;
+    padding: 15px;
+    border-radius: 12px;
+    background-color: #f8f9fa;
+    max-height: 250px;
+    overflow-y: auto;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #212529;
+    border: 1px solid #e9ecef;
+}
+
+/* Scrollbar styling */
+.chat-response::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-response::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.chat-response::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+.chat-response::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Loading animation */
+.loading-dots {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    margin: 0 4px;
+    background-color: #212529;
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+}
+
+.dot:nth-child(2) { animation-delay: 0.2s; }
+.dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes pulse {
+    0%, 100% { transform: scale(0.8); opacity: 0.5; }
+    50% { transform: scale(1.2); opacity: 1; }
+}
+</style>
+""", unsafe_allow_html=True)
+
+def create_send_button_html():
+    """Create HTML for the send button with arrow icon"""
+    return """
+    <svg class="arrow-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+    </svg>
+    """
+
+def beautiful_prompt_section(tab_name: str):
+    """Create beautiful floating prompt section with arrow send button"""
+    # Use a unique key for each tab's prompt container
+    container_key = f"prompt_container_{tab_name}"
+    input_key = f"chat_input_{tab_name}"
+    button_key = f"send_button_{tab_name}"
+    
+    if container_key not in st.session_state:
+        st.session_state[container_key] = True
+        with st.container():
+            st.markdown('<div class="beautiful-chat">', unsafe_allow_html=True)
+            
+            # Add context-specific placeholder text
+            placeholder_text = {
+                "failure": "Ask about failure patterns or specific issues...",
+                "trend": "Ask about trends and patterns over time...",
+                "gap": "Ask about testing gaps and coverage...",
+                "lob": "Ask about LOB performance and issues...",
+                "predictive": "Ask about predictions and risks..."
+            }.get(tab_name, "Ask a question about the analysis...")
+            
+            # Create input container with send button
+            st.markdown(
+                f'''
+                <div class="input-container">
+                    <input type="text" class="chat-input" 
+                        placeholder="{placeholder_text}" 
+                        id="{input_key}"
+                    />
+                    <button class="send-button" id="{button_key}" onclick="send_message('{input_key}')">
+                        {create_send_button_html()}
+                    </button>
+                </div>
+                ''',
+                unsafe_allow_html=True
+            )
+            
+            # Add JavaScript for handling input and button click
+            st.markdown(
+                f'''
+                <script>
+                function send_message(inputId) {{
+                    const input = document.getElementById(inputId);
+                    const message = input.value;
+                    if (message) {{
+                        // Clear input
+                        input.value = '';
+                        // Send message to Streamlit
+                        window.parent.postMessage({{
+                            type: 'streamlit:message',
+                            data: message
+                        }}, '*');
+                    }}
+                }}
+                
+                // Handle Enter key
+                document.getElementById('{input_key}').addEventListener('keypress', function(e) {{
+                    if (e.key === 'Enter') {{
+                        send_message('{input_key}');
+                    }}
+                }});
+                </script>
+                ''',
+                unsafe_allow_html=True
+            )
+            
+            # Handle message processing
+            user_input = st.text_input(
+                "",
+                key=f"hidden_input_{tab_name}",
+                label_visibility="collapsed"
+            )
+            
+            if user_input:
+                with st.spinner(""):
+                    try:
+                        # Show loading animation
+                        st.markdown(
+                            '''
+                            <div class="loading-dots">
+                                <div class="dot"></div>
+                                <div class="dot"></div>
+                                <div class="dot"></div>
+                            </div>
+                            ''',
+                            unsafe_allow_html=True
+                        )
+                        
+                        # Get AI response
+                        response = get_ai_analysis(user_input)
+                        
+                        if response:
+                            st.markdown('<div class="chat-response">', unsafe_allow_html=True)
+                            st.markdown(response)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                        else:
+                            st.error("Unable to generate analysis. Please try again.")
+                    except Exception as e:
+                        st.error(f"Error during analysis: {str(e)}")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
 
 def get_ai_analysis(prompt):
     """Get AI analysis using Azure OpenAI API"""
-    if st.session_state.openai_client is not None and st.session_state.data is not None:
+    if ai_client is not None and st.session_state.data is not None:
         try:
             # Calculate actual distributions from the data
             df = st.session_state.data
@@ -439,7 +398,7 @@ def get_ai_analysis(prompt):
             When asked about specific types of issues (e.g., Environment issues), filter the data accordingly and provide precise numbers."""
 
             # Get AI response
-            response = st.session_state.openai_client.chat.completions.create(
+            response = ai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": system_message},
@@ -458,7 +417,7 @@ def get_ai_analysis(prompt):
                 st.error("Analysis contains too much data. Trying with summarized information...")
                 try:
                     truncated_prompt = truncate_prompt(prompt)
-                    response = st.session_state.openai_client.chat.completions.create(
+                    response = ai_client.chat.completions.create(
                         model="gpt-4",
                         messages=[
                             {"role": "system", "content": system_message},
@@ -550,7 +509,7 @@ def get_summary_stats(df):
 def get_ai_response(prompt, context):
     """Get AI analysis for specific prompts"""
     try:
-        if st.session_state.openai_client is None:
+        if ai_client is None:
             return "OpenAI client not initialized. Please check your environment variables."
             
         analysis_prompt = f"""
@@ -566,7 +525,7 @@ def get_ai_response(prompt, context):
         3. Recommendations if applicable
         """
         
-        response = st.session_state.openai_client.chat.completions.create(
+        response = ai_client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are a QA expert analyzing test failure data."},
@@ -579,34 +538,12 @@ def get_ai_response(prompt, context):
     except Exception as e:
         return f"Error generating analysis: {str(e)}"
 
-def floating_prompt_section():
-    """Create floating prompt section"""
-    with st.container():
-        st.markdown('<div class="floating-chat">', unsafe_allow_html=True)
-        
-        user_input = st.text_input(
-            "",
-            placeholder="Ask questions like: 'What are the open defects?' or 'Show defects in C&I module'",
-            key="chat_input"
-        )
-        
-        if st.button("Ask", key="ask_button"):
-            if user_input:
-                with st.spinner("Analyzing..."):
-                    get_ai_analysis(user_input)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-
 def failure_analysis_tab(df):
-    """Tab 1: Failure Analysis with Interactive Prompting"""
+    """Tab 1: Failure Analysis"""
     st.header("🔍 Failure Analysis")
     
-    # Add floating prompt section
-    floating_prompt_section()
-    
-    # Store the current section for context-aware prompting
-    if 'current_section' not in st.session_state:
-        st.session_state.current_section = 'overview'
+    # Add beautiful prompt
+    beautiful_prompt_section("failure")
     
     # Modern styling configuration
     chart_config = {
@@ -764,6 +701,9 @@ def trend_analysis_tab(df):
     """Tab 2: Failure Trends Over Time"""
     st.header("📈 Failure Trends Over Time")
     
+    # Add beautiful prompt
+    beautiful_prompt_section("trend")
+    
     # Date range filter
     date_range = st.date_input(
         "Select Date Range",
@@ -918,6 +858,9 @@ def gap_analysis_tab(df):
     """Tab 3: Gap Analysis"""
     st.header("🔍 Gap Analysis")
     
+    # Add beautiful prompt
+    beautiful_prompt_section("gap")
+    
     # Filter failed test cases
     failed_df = df[df['Execution Status'] == 'Fail']
     
@@ -1060,8 +1003,11 @@ def gap_analysis_tab(df):
     st.plotly_chart(fig_heatmap, use_container_width=True)
 
 def lob_analysis_tab(df):
-    """Tab 4: LOB-Wise Failure Analysis"""
-    st.header("📊 LOB-Wise Failure Analysis")
+    """Tab 4: LOB Analysis"""
+    st.header("📊 LOB Analysis")
+    
+    # Add beautiful prompt
+    beautiful_prompt_section("lob")
     
     # Add weekend vs weekday analysis
     df['IsWeekend'] = df['Execution Date'].dt.dayofweek.isin([5, 6])
@@ -1205,6 +1151,9 @@ def lob_analysis_tab(df):
 def predictive_analysis_tab(df):
     """Tab 5: Predictive Analysis"""
     st.header("🔮 Predictive Analysis")
+    
+    # Add beautiful prompt
+    beautiful_prompt_section("predictive")
     
     # Prepare data for prediction
     df['DaysSinceStart'] = (df['Execution Date'] - df['Execution Date'].min()).dt.days
