@@ -101,6 +101,27 @@ def floating_prompt_section(context: Optional[str] = None, analysis_function: Op
     """, unsafe_allow_html=True)
    
     with st.container():
+        # Add CSS to hide the Streamlit input
+        st.markdown(
+            """
+            <style>
+            /* Hide the default Streamlit input */
+            .stTextInput {
+                position: absolute;
+                left: -9999px;
+                width: 1px;
+                height: 1px;
+                overflow: hidden;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # Create a hidden text input to capture the user's query
+        input_key = f"hidden_input_{context if context else 'general'}"
+        user_input = st.text_input("", key=input_key, label_visibility="collapsed")
+        
         st.markdown('<div class="floating-chat">', unsafe_allow_html=True)
         
         # Add context-specific placeholder text
@@ -117,10 +138,6 @@ def floating_prompt_section(context: Optional[str] = None, analysis_function: Op
             placeholder = "Ask about future trends, risk areas, or potential issues..."
         elif context == "root_cause":
             placeholder = "Ask about root causes and solutions..."
-        
-        # Create a hidden text input to capture the user's query
-        input_key = f"hidden_input_{context if context else 'general'}"
-        user_input = st.text_input("", key=input_key, label_visibility="collapsed")
         
         # Create input container with send button
         st.markdown(
