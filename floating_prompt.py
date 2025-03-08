@@ -102,12 +102,56 @@ def floating_prompt_section(context: Optional[str] = None, analysis_function: Op
         elif context == "root_cause":
             placeholder = "Ask about root causes and solutions..."
         
+        # Add JavaScript to preserve input after submission
+        st.markdown(
+            """
+            <script>
+            // Store the input value in session storage when it changes
+            document.addEventListener('DOMContentLoaded', function() {
+                // Wait for Streamlit to fully load
+                setTimeout(function() {
+                    const chatInputs = document.querySelectorAll('.stChatInput input');
+                    chatInputs.forEach(input => {
+                        // Set initial value from session storage if exists
+                        const storedValue = sessionStorage.getItem(input.id);
+                        if (storedValue) {
+                            input.value = storedValue;
+                        }
+                        
+                        // Store value when it changes
+                        input.addEventListener('input', function() {
+                            sessionStorage.setItem(this.id, this.value);
+                        });
+                        
+                        // Clear storage when form is submitted
+                        const form = input.closest('form');
+                        if (form) {
+                            form.addEventListener('submit', function() {
+                                // Don't clear the input value
+                                setTimeout(function() {
+                                    input.value = sessionStorage.getItem(input.id);
+                                }, 100);
+                            });
+                        }
+                    });
+                }, 1000);
+            });
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
+        
         # Use Streamlit's chat_input
         user_input = st.chat_input(placeholder=placeholder, key=f"chat_input_{context if context else 'general'}")
         
         # Process the input
         if user_input and analysis_function:
             with st.spinner("Analyzing..."):
+                # Store the current input in session state to preserve it
+                if f"prev_input_{context}" not in st.session_state:
+                    st.session_state[f"prev_input_{context}"] = ""
+                st.session_state[f"prev_input_{context}"] = user_input
+                
                 response = analysis_function(user_input)
                 if response:
                     st.markdown(f"<div class='chat-response'>{response}</div>", unsafe_allow_html=True)
