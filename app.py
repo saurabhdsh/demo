@@ -1580,10 +1580,15 @@ def create_beautiful_prompt_css():
         border-radius: 50px !important;
         border: 1px solid #e9ecef !important;
         background-color: #f8f9fa !important;
+        position: relative !important;
+        display: flex !important;
+        align-items: center !important;
     }
     
     .stChatInput input {
         border-radius: 50px !important;
+        padding-right: 40px !important;
+        width: calc(100% - 40px) !important;
     }
     
     .stChatInput button {
@@ -1597,6 +1602,14 @@ def create_beautiful_prompt_css():
         background-color: #f8f9fa !important;
         border: none !important;
         color: #2e6fdb !important;
+        position: absolute !important;
+        right: 4px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+    }
+    
+    .stChatInput button:hover {
+        background-color: #e9ecef !important;
     }
     
     /* Scrollbar styling */
