@@ -40,6 +40,47 @@ def floating_prompt_section(context: Optional[str] = None, analysis_function: Op
         color: #212529;
         border: 1px solid #e9ecef;
     }
+    
+    /* Custom styling for chat input */
+    .stChatInput {
+        margin-top: 10px;
+    }
+    
+    .stChatInput > div {
+        border-radius: 50px !important;
+        border: 1px solid #e9ecef !important;
+        background-color: #f8f9fa !important;
+        position: relative !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    
+    .stChatInput input {
+        border-radius: 50px !important;
+        padding-right: 40px !important;
+        width: calc(100% - 40px) !important;
+    }
+    
+    .stChatInput button {
+        border-radius: 50% !important;
+        width: 32px !important;
+        height: 32px !important;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background-color: #f8f9fa !important;
+        border: none !important;
+        color: #2e6fdb !important;
+        position: absolute !important;
+        right: 4px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+    }
+    
+    .stChatInput button:hover {
+        background-color: #e9ecef !important;
+    }
     </style>
     """, unsafe_allow_html=True)
    
@@ -61,93 +102,59 @@ def floating_prompt_section(context: Optional[str] = None, analysis_function: Op
         elif context == "root_cause":
             placeholder = "Ask about root causes and solutions..."
         
-        # Initialize session state for this context if it doesn't exist
-        input_key = f"input_{context if context else 'general'}"
-        if input_key not in st.session_state:
-            st.session_state[input_key] = ""
-        
-        # Create a form to handle the input submission
-        with st.form(key=f"chat_form_{context if context else 'general'}", clear_on_submit=False):
-            # Use text_input instead of chat_input to have more control
-            user_input = st.text_input(
-                "",
-                value=st.session_state[input_key],
-                placeholder=placeholder,
-                key=f"text_{input_key}",
-                label_visibility="collapsed"
-            )
-            
-            # Create a custom submit button that looks like a send button
-            col1, col2 = st.columns([6, 1])
-            with col2:
-                submitted = st.form_submit_button("Send")
-        
-        # Apply custom CSS to make it look like our design
+        # Add JavaScript to preserve input after submission
         st.markdown(
             """
-            <style>
-            /* Style the form to look like chat input */
-            .stForm {
-                background-color: transparent !important;
-                border: none !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            
-            /* Hide the form border */
-            .stForm > div {
-                border: none !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            
-            /* Style the text input */
-            .stTextInput > div > div > input {
-                border-radius: 50px !important;
-                border: 1px solid #e9ecef !important;
-                background-color: #f8f9fa !important;
-                padding: 8px 16px !important;
-            }
-            
-            /* Style the submit button */
-            .stForm button {
-                border-radius: 50% !important;
-                width: 40px !important;
-                height: 40px !important;
-                padding: 0 !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                background-color: #f8f9fa !important;
-                border: 1px solid #e9ecef !important;
-                color: #2e6fdb !important;
-                font-size: 20px !important;
-                line-height: 1 !important;
-            }
-            
-            .stForm button:hover {
-                background-color: #e9ecef !important;
-            }
-            
-            /* Hide the label */
-            .stTextInput label {
-                display: none !important;
-            }
-            </style>
+            <script>
+            // Store the input value in session storage when it changes
+            document.addEventListener('DOMContentLoaded', function() {
+                // Wait for Streamlit to fully load
+                setTimeout(function() {
+                    const chatInputs = document.querySelectorAll('.stChatInput input');
+                    chatInputs.forEach(input => {
+                        // Set initial value from session storage if exists
+                        const storedValue = sessionStorage.getItem(input.id);
+                        if (storedValue) {
+                            input.value = storedValue;
+                        }
+                        
+                        // Store value when it changes
+                        input.addEventListener('input', function() {
+                            sessionStorage.setItem(this.id, this.value);
+                        });
+                        
+                        // Clear storage when form is submitted
+                        const form = input.closest('form');
+                        if (form) {
+                            form.addEventListener('submit', function() {
+                                // Don't clear the input value
+                                setTimeout(function() {
+                                    input.value = sessionStorage.getItem(input.id);
+                                }, 100);
+                            });
+                        }
+                    });
+                }, 1000);
+            });
+            </script>
             """,
             unsafe_allow_html=True
         )
         
-        # Process the input when the form is submitted
-        if submitted and user_input:
-            # Store the input in session state
-            st.session_state[input_key] = user_input
-            
-            if analysis_function:
-                with st.spinner("Analyzing..."):
-                    response = analysis_function(user_input)
-                    if response:
-                        st.markdown(f"<div class='chat-response'>{response}</div>", unsafe_allow_html=True)
+        # Use Streamlit's chat_input
+        user_input = st.chat_input(placeholder=placeholder, key=f"chat_input_{context if context else 'general'}")
+        
+        # Process the input
+        if user_input and analysis_function:
+            with st.spinner("Analyzing..."):
+                # Store the current input in session state to preserve it
+                if f"prev_input_{context}" not in st.session_state:
+                    st.session_state[f"prev_input_{context}"] = ""
+                st.session_state[f"prev_input_{context}"] = user_input
+                
+                response = analysis_function(user_input)
+                if response:
+                    st.markdown(f"<div class='chat-response'>{response}</div>", unsafe_allow_html=True)
        
         st.markdown('</div>', unsafe_allow_html=True)
  

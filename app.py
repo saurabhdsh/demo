@@ -81,64 +81,30 @@ if 'data' not in st.session_state:
     st.session_state.data = None
 
 def get_ai_analysis(prompt):
-    """Get AI analysis using Azure OpenAI API"""
+    """Get AI analysis using Azure OpenAI API with optimized token usage"""
     if ai_client is not None and st.session_state.data is not None:
         try:
-            # Create context for the AI
-            if st.session_state.prompt:
-                # Get the current data
-                df = st.session_state.data
-                failed_df = df[df['Execution Status'] == 'Fail']
-               
-                # Calculate key metrics for context
-                total_tests = len(df)
-                total_failures = len(failed_df)
-                failure_rate = (total_failures / total_tests * 100) if total_tests > 0 else 0
-               
-                # Calculate distributions
-                defect_dist = failed_df['Defect Type'].value_counts()
-                severity_dist = failed_df['Severity'].value_counts()
-                priority_dist = failed_df['Priority'].value_counts()
-                status_dist = failed_df['Defect Status'].value_counts()
-                lob_dist = failed_df['LOB'].value_counts()
-                app_dist=failed_df['Application'].value_counts()
-                context = f"""Current metrics:
-                - Total Tests: {total_tests}
-                - Failed Tests: {total_failures}
-                - Failure Rate: {failure_rate:.2f}%
-               
-                Defect Distribution:
-                {defect_dist.to_string()}
-               
-                Severity Distribution:
-                {severity_dist.to_string()}
-               
-                Priority Distribution:
-                {priority_dist.to_string()}
-               
-                Status Distribution:
-                {status_dist.to_string()}
-               
-                LOB Distribution:
-                {lob_dist.to_string()}
- 
-                Application Distribution:
-                {app_dist.to_string()}
-               
-                Based the data provided, answer the user question to best of your ability. Keep in mind the """
-                st.session_state.prompt=False
-            else:
-                context="You are a QA expert analyzing test failure data"
-           
-            # Get AI response with optimized system message
+            # Create a more concise system message
+            system_message = "You are a QA expert analyzing test failure data. Provide concise, actionable insights."
+            
+            # Estimate token count (rough approximation)
+            estimated_tokens = len(prompt.split()) * 1.3  # Rough estimate: 1 token ≈ 0.75 words
+            
+            # If prompt is too long, truncate it further
+            if estimated_tokens > 3000:  # Leave room for system message and response
+                prompt = truncate_prompt_for_token_limit(prompt, 3000)
+            
+            # Get AI response with optimized parameters
             response = ai_client.chat.completions.create(
                 model=DEPLOYMENT_NAME,
                 messages=[
-                    {"role": "system", "content": context},
+                    {"role": "system", "content": system_message},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
-                max_tokens=500
+                max_tokens=800,  # Increased from 500 to allow for more detailed responses
+                top_p=0.95,      # Focus on more likely tokens
+                frequency_penalty=0.5  # Reduce repetition
             )
            
             # Return the response content
@@ -151,18 +117,104 @@ def get_ai_analysis(prompt):
         st.warning("Azure OpenAI client not initialized or no data loaded. Please check your configuration and upload data.")
         return None
 
-def truncate_prompt(prompt):
-    """Truncate the prompt to handle token limits"""
-    # Split the prompt into lines
+def truncate_prompt_for_token_limit(prompt, target_tokens):
+    """Intelligently truncate a prompt to fit within token limits"""
     lines = prompt.split('\n')
-    header_lines = [line for line in lines if not line.strip().startswith('{') and not line.strip().isdigit()]
-    data_lines = [line for line in lines if line.strip().startswith('{') or line.strip().isdigit()]
-   
-    # Take only the first 10 most relevant data points
-    truncated_data = data_lines[:10] if len(data_lines) > 10 else data_lines
-   
-    # Combine header and truncated data
-    return '\n'.join(header_lines + ['', 'Summary of top issues:'] + truncated_data)
+    
+    # Identify sections in the prompt
+    sections = []
+    current_section = []
+    current_section_name = "header"
+    
+    for line in lines:
+        if line.strip().startswith('METRICS:'):
+            # Save previous section and start a new one
+            if current_section:
+                sections.append((current_section_name, current_section))
+            current_section = [line]
+            current_section_name = "metrics"
+        elif line.strip().startswith('DISTRIBUTIONS:'):
+            if current_section:
+                sections.append((current_section_name, current_section))
+            current_section = [line]
+            current_section_name = "distributions"
+        elif line.strip().startswith('RECENT ISSUES:'):
+            if current_section:
+                sections.append((current_section_name, current_section))
+            current_section = [line]
+            current_section_name = "issues"
+        elif line.strip().startswith('USER QUESTION:'):
+            if current_section:
+                sections.append((current_section_name, current_section))
+            current_section = [line]
+            current_section_name = "question"
+        elif line.strip().startswith('Provide a concise analysis'):
+            if current_section:
+                sections.append((current_section_name, current_section))
+            current_section = [line]
+            current_section_name = "instructions"
+        else:
+            current_section.append(line)
+    
+    # Add the last section
+    if current_section:
+        sections.append((current_section_name, current_section))
+    
+    # Prioritize sections (keep question, metrics, and instructions intact)
+    essential_sections = ["header", "metrics", "question", "instructions"]
+    truncatable_sections = ["distributions", "issues"]
+    
+    # Calculate tokens for essential sections
+    essential_text = ""
+    for name, section in sections:
+        if name in essential_sections:
+            essential_text += "\n".join(section) + "\n"
+    
+    essential_tokens = len(essential_text.split()) * 1.3
+    remaining_tokens = target_tokens - essential_tokens
+    
+    # If essential sections already exceed the limit, truncate the prompt drastically
+    if remaining_tokens <= 0:
+        return f"""Analyze the following test data.
+
+USER QUESTION: {prompt.split('USER QUESTION:')[1].split('Provide')[0].strip()}
+
+Provide a concise analysis."""
+    
+    # Truncate non-essential sections
+    truncated_sections = {}
+    for name, section in sections:
+        if name in truncatable_sections:
+            section_text = "\n".join(section)
+            section_tokens = len(section_text.split()) * 1.3
+            
+            if name == "distributions":
+                # Keep only the first 3 distribution lines
+                truncated_sections[name] = [section[0]] + section[1:4]
+            elif name == "issues":
+                # Keep only the first 2 issues
+                issue_lines = []
+                issue_count = 0
+                for line in section:
+                    if line.strip().startswith("Issue"):
+                        issue_count += 1
+                        if issue_count <= 2:
+                            issue_lines.append(line)
+                    else:
+                        issue_lines.append(line)
+                truncated_sections[name] = issue_lines
+            else:
+                truncated_sections[name] = section
+    
+    # Reconstruct the prompt
+    truncated_prompt = ""
+    for name, section in sections:
+        if name in essential_sections:
+            truncated_prompt += "\n".join(section) + "\n"
+        elif name in truncatable_sections:
+            truncated_prompt += "\n".join(truncated_sections[name]) + "\n"
+    
+    return truncated_prompt.strip()
 
 def load_and_validate_data(file):
     """Load and validate the uploaded CSV file or file path"""
@@ -1684,149 +1736,146 @@ def beautiful_prompt_section(context: Optional[str] = None, analysis_function: O
             "root_cause": "Ask about root causes and solutions..."
         }.get(context, "Ask a question about the analysis...")
         
-        # Initialize session state for this context if it doesn't exist
-        input_key = f"input_{context if context else 'general'}"
-        if input_key not in st.session_state:
-            st.session_state[input_key] = ""
-        
-        # Create a form to handle the input submission
-        with st.form(key=f"chat_form_{context if context else 'general'}", clear_on_submit=False):
-            # Use text_input instead of chat_input to have more control
-            user_input = st.text_input(
-                "",
-                value=st.session_state[input_key],
-                placeholder=placeholder_text,
-                key=f"text_{input_key}",
-                label_visibility="collapsed"
-            )
-            
-            # Create a custom submit button that looks like a send button
-            col1, col2 = st.columns([6, 1])
-            with col2:
-                submitted = st.form_submit_button("Send")
-        
-        # Apply custom CSS to make it look like our design
+        # Add JavaScript to preserve input after submission
         st.markdown(
             """
-            <style>
-            /* Style the form to look like chat input */
-            .stForm {
-                background-color: transparent !important;
-                border: none !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            
-            /* Hide the form border */
-            .stForm > div {
-                border: none !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            
-            /* Style the text input */
-            .stTextInput > div > div > input {
-                border-radius: 50px !important;
-                border: 1px solid #e9ecef !important;
-                background-color: #f8f9fa !important;
-                padding: 8px 16px !important;
-            }
-            
-            /* Style the submit button */
-            .stForm button {
-                border-radius: 50% !important;
-                width: 40px !important;
-                height: 40px !important;
-                padding: 0 !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                background-color: #f8f9fa !important;
-                border: 1px solid #e9ecef !important;
-                color: #2e6fdb !important;
-                font-size: 20px !important;
-                line-height: 1 !important;
-            }
-            
-            .stForm button:hover {
-                background-color: #e9ecef !important;
-            }
-            
-            /* Hide the label */
-            .stTextInput label {
-                display: none !important;
-            }
-            </style>
+            <script>
+            // Store the input value in session storage when it changes
+            document.addEventListener('DOMContentLoaded', function() {
+                // Wait for Streamlit to fully load
+                setTimeout(function() {
+                    const chatInputs = document.querySelectorAll('.stChatInput input');
+                    chatInputs.forEach(input => {
+                        // Set initial value from session storage if exists
+                        const storedValue = sessionStorage.getItem(input.id);
+                        if (storedValue) {
+                            input.value = storedValue;
+                        }
+                        
+                        // Store value when it changes
+                        input.addEventListener('input', function() {
+                            sessionStorage.setItem(this.id, this.value);
+                        });
+                        
+                        // Clear storage when form is submitted
+                        const form = input.closest('form');
+                        if (form) {
+                            form.addEventListener('submit', function() {
+                                // Don't clear the input value
+                                setTimeout(function() {
+                                    input.value = sessionStorage.getItem(input.id);
+                                }, 100);
+                            });
+                        }
+                    });
+                }, 1000);
+            });
+            </script>
             """,
             unsafe_allow_html=True
         )
         
-        # Process the input when the form is submitted
-        if submitted and user_input:
-            # Store the input in session state
-            st.session_state[input_key] = user_input
-            
-            if analysis_function and st.session_state.data is not None:
-                with st.spinner(""):
-                    try:
-                        # Prepare data for context
-                        metrics = truncate_data_for_context(st.session_state.data)
-                        
-                        # Create focused prompt
-                        prompt = create_analysis_prompt(context or "general", metrics, user_input)
-                        
-                        # Get AI response
-                        response = analysis_function(prompt)
-                        
-                        if response:
-                            st.markdown('<div class="chat-response">', unsafe_allow_html=True)
-                            st.markdown(response)
-                            st.markdown('</div>', unsafe_allow_html=True)
-                        else:
-                            st.error("Unable to generate analysis. Please try again.")
-                    except Exception as e:
-                        st.error(f"Error during analysis: {str(e)}")
+        # Use Streamlit's chat_input
+        user_input = st.chat_input(placeholder=placeholder_text, key=f"chat_input_{context if context else 'general'}")
+        
+        # Process the input
+        if user_input and analysis_function and st.session_state.data is not None:
+            with st.spinner(""):
+                try:
+                    # Store the current input in session state to preserve it
+                    if f"prev_input_{context}" not in st.session_state:
+                        st.session_state[f"prev_input_{context}"] = ""
+                    st.session_state[f"prev_input_{context}"] = user_input
+                    
+                    # Prepare data for context
+                    metrics = truncate_data_for_context(st.session_state.data)
+                    
+                    # Create focused prompt
+                    prompt = create_analysis_prompt(context or "general", metrics, user_input)
+                    
+                    # Get AI response
+                    response = analysis_function(prompt)
+                    
+                    if response:
+                        st.markdown('<div class="chat-response">', unsafe_allow_html=True)
+                        st.markdown(response)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    else:
+                        st.error("Unable to generate analysis. Please try again.")
+                except Exception as e:
+                    st.error(f"Error during analysis: {str(e)}")
         
         st.markdown('</div>', unsafe_allow_html=True)
 
 def truncate_data_for_context(df: pd.DataFrame) -> dict:
-    """Prepare and truncate data for OpenAI context"""
+    """Prepare and truncate data for OpenAI context with optimized token usage"""
     if df is None or len(df) == 0:
         return {}
         
     # Get only failed test cases for analysis
     failed_df = df[df['Execution Status'] == 'Fail'].copy()
     
-    # Get the most recent 20 failures
-    recent_failures = failed_df.nlargest(20, 'Execution Date')
+    # Get the most recent failures (limit to 10 instead of 20)
+    recent_failures = failed_df.nlargest(10, 'Execution Date')
     
     # Calculate key metrics
     total_tests = len(df)
     total_failures = len(failed_df)
     failure_rate = (total_failures / total_tests * 100) if total_tests > 0 else 0
     
+    # Get top N items for each distribution (limit to top 5 for each category)
+    def get_top_n_dict(series, n=5):
+        counts = series.value_counts()
+        if len(counts) <= n:
+            return counts.to_dict()
+        else:
+            top_n = counts.nlargest(n)
+            result = top_n.to_dict()
+            if len(counts) > n:
+                # Add an "Others" category with the sum of remaining values
+                result['Others'] = counts[n:].sum()
+            return result
+    
+    # Create optimized metrics dictionary
     metrics = {
         'total_tests': total_tests,
         'total_failures': total_failures,
-        'failure_rate': failure_rate,
+        'failure_rate': round(failure_rate, 2),  # Round to 2 decimal places to save tokens
         'recent_failures': len(recent_failures),
-        'defect_types': failed_df['Defect Type'].value_counts().to_dict(),
-        'severity_dist': failed_df['Severity'].value_counts().to_dict() if 'Severity' in failed_df.columns else {},
-        'priority_dist': failed_df['Priority'].value_counts().to_dict() if 'Priority' in failed_df.columns else {},
-        'status_dist': failed_df['Defect Status'].value_counts().to_dict(),
-        'lob_dist': failed_df['LOB'].value_counts().to_dict(),
-        'recent_issues': recent_failures[[
-            'Test Case ID', 
-            'Defect Type', 
-            'Defect Status',
-            'Defect Description'
-        ]].to_dict('records')[:5]  # Limit to 5 most recent issues
+        'defect_types': get_top_n_dict(failed_df['Defect Type']),
+        'status_dist': get_top_n_dict(failed_df['Defect Status']),
+        'lob_dist': get_top_n_dict(failed_df['LOB'])
     }
+    
+    # Only include optional columns if they exist
+    if 'Severity' in failed_df.columns:
+        metrics['severity_dist'] = get_top_n_dict(failed_df['Severity'])
+    
+    if 'Priority' in failed_df.columns:
+        metrics['priority_dist'] = get_top_n_dict(failed_df['Priority'])
+    
+    # For recent issues, only include essential fields and limit descriptions
+    recent_issues = []
+    for _, row in recent_failures.head(3).iterrows():  # Limit to top 3 most recent issues
+        issue = {
+            'Test Case ID': row['Test Case ID'],
+            'Defect Type': row['Defect Type'],
+            'Defect Status': row['Defect Status']
+        }
+        
+        # Truncate description to save tokens
+        if 'Defect Description' in row and isinstance(row['Defect Description'], str):
+            desc = row['Defect Description']
+            issue['Defect Description'] = desc[:100] + '...' if len(desc) > 100 else desc
+        
+        recent_issues.append(issue)
+    
+    metrics['recent_issues'] = recent_issues
     
     return metrics
 
 def create_analysis_prompt(context: str, metrics: dict, user_query: str) -> str:
-    """Create a focused prompt for OpenAI analysis"""
+    """Create a focused prompt for OpenAI analysis with optimized token usage"""
     context_focus = {
         "failure": "failure patterns and root causes",
         "trend": "trends and patterns over time",
@@ -1836,34 +1885,56 @@ def create_analysis_prompt(context: str, metrics: dict, user_query: str) -> str:
         "root_cause": "root causes and solutions"
     }.get(context, "general analysis")
     
-    base_prompt = f"""As a QA expert, analyze the following test failure data focusing on {context_focus}.
+    # Format distributions in a more compact way
+    def format_distribution(dist_dict):
+        if not dist_dict:
+            return "None"
+        return ", ".join([f"{k}: {v}" for k, v in dist_dict.items()])
+    
+    # Format recent issues in a more compact way
+    def format_recent_issues(issues):
+        if not issues:
+            return "None"
+        
+        formatted = []
+        for i, issue in enumerate(issues, 1):
+            issue_str = f"Issue {i}: {issue.get('Test Case ID', 'N/A')} - {issue.get('Defect Type', 'N/A')} - {issue.get('Defect Status', 'N/A')}"
+            if 'Defect Description' in issue:
+                issue_str += f" - {issue.get('Defect Description', 'N/A')}"
+            formatted.append(issue_str)
+        
+        return "\n".join(formatted)
+    
+    base_prompt = f"""Analyze the following test failure data focusing on {context_focus}.
 
-Current Metrics:
-- Total Tests: {metrics.get('total_tests', 0)}
-- Total Failures: {metrics.get('total_failures', 0)}
-- Failure Rate: {metrics.get('failure_rate', 0):.2f}%
-- Recent Failures: {metrics.get('recent_failures', 0)}
+METRICS:
+Tests: {metrics.get('total_tests', 0)} | Failures: {metrics.get('total_failures', 0)} | Rate: {metrics.get('failure_rate', 0)}% | Recent: {metrics.get('recent_failures', 0)}
 
-Distribution Summary:
-- Defect Types: {metrics.get('defect_types', {})}
-- Severity: {metrics.get('severity_dist', {})}
-- Priority: {metrics.get('priority_dist', {})}
-- Status: {metrics.get('status_dist', {})}
-- LOB Distribution: {metrics.get('lob_dist', {})}
+DISTRIBUTIONS:
+- Defect Types: {format_distribution(metrics.get('defect_types', {}))}
+- Status: {format_distribution(metrics.get('status_dist', {}))}
+- LOB: {format_distribution(metrics.get('lob_dist', {}))}"""
 
-Recent Critical Issues:
-{str(metrics.get('recent_issues', []))}
+    # Only include optional distributions if they exist
+    if 'severity_dist' in metrics:
+        base_prompt += f"\n- Severity: {format_distribution(metrics.get('severity_dist', {}))}"
+    
+    if 'priority_dist' in metrics:
+        base_prompt += f"\n- Priority: {format_distribution(metrics.get('priority_dist', {}))}"
 
-User Question: {user_query}
+    base_prompt += f"""
 
-Please provide a detailed analysis including:
-1. Direct answer to the user's question
-2. Key insights from the relevant metrics
-3. Specific patterns or trends identified
-4. Actionable recommendations
-5. Risk assessment if applicable
+RECENT ISSUES:
+{format_recent_issues(metrics.get('recent_issues', []))}
 
-Format your response in markdown with appropriate headers and bullet points."""
+USER QUESTION: {user_query}
+
+Provide a concise analysis with:
+1. Direct answer to the question
+2. Key insights from metrics
+3. Patterns identified
+4. Recommendations
+5. Risk assessment"""
 
     return base_prompt
 
