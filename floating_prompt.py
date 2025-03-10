@@ -152,9 +152,27 @@ def floating_prompt_section(context: Optional[str] = None, analysis_function: Op
                     st.session_state[f"prev_input_{context}"] = ""
                 st.session_state[f"prev_input_{context}"] = user_input
                 
-                response = analysis_function(user_input)
-                if response:
-                    st.markdown(f"<div class='chat-response'>{response}</div>", unsafe_allow_html=True)
+                try:
+                    # Check if data is available
+                    if st.session_state.data is not None:
+                        # Prepare data for context
+                        metrics = truncate_data_for_context(st.session_state.data)
+                        
+                        # Create focused prompt
+                        prompt = create_analysis_prompt(context or "general", metrics, user_input)
+                        
+                        # Get AI response with the formatted prompt
+                        response = analysis_function(prompt)
+                    else:
+                        # If no data is available, just pass the user input directly
+                        response = analysis_function(user_input)
+                    
+                    if response:
+                        st.markdown(f"<div class='chat-response'>{response}</div>", unsafe_allow_html=True)
+                    else:
+                        st.error("Unable to generate analysis. Please try again.")
+                except Exception as e:
+                    st.error(f"Error during analysis: {str(e)}")
        
         st.markdown('</div>', unsafe_allow_html=True)
  
@@ -207,3 +225,67 @@ def truncate_data_for_context(df: pd.DataFrame) -> dict:
     }
     
     return metrics
+
+def create_analysis_prompt(context: str, metrics: dict, user_query: str) -> str:
+    """Create a focused prompt for OpenAI analysis with optimized token usage"""
+    context_focus = {
+        "failure": "failure patterns and root causes",
+        "trend": "trends and patterns over time",
+        "gap": "testing gaps and areas needing attention",
+        "lob": "LOB-specific performance and issues",
+        "predictive": "predictions and future risks",
+        "root_cause": "root causes and solutions"
+    }.get(context, "general analysis")
+    
+    # Format distributions in a more compact way
+    def format_distribution(dist_dict):
+        if not dist_dict:
+            return "None"
+        return ", ".join([f"{k}: {v}" for k, v in dist_dict.items()])
+    
+    # Format recent issues in a more compact way
+    def format_recent_issues(issues):
+        if not issues:
+            return "None"
+        
+        formatted = []
+        for i, issue in enumerate(issues, 1):
+            issue_str = f"Issue {i}: {issue.get('Test Case ID', 'N/A')} - {issue.get('Defect Type', 'N/A')} - {issue.get('Defect Status', 'N/A')}"
+            if 'Defect Description' in issue:
+                issue_str += f" - {issue.get('Defect Description', 'N/A')}"
+            formatted.append(issue_str)
+        
+        return "\n".join(formatted)
+    
+    base_prompt = f"""Analyze the following test failure data focusing on {context_focus}.
+
+METRICS:
+Tests: {metrics.get('total_tests', 0)} | Failures: {metrics.get('total_failures', 0)} | Rate: {metrics.get('failure_rate', 0)}% | Recent: {metrics.get('recent_failures', 0)}
+
+DISTRIBUTIONS:
+- Defect Types: {format_distribution(metrics.get('defect_types', {}))}
+- Status: {format_distribution(metrics.get('status_dist', {}))}
+- LOB: {format_distribution(metrics.get('lob_dist', {}))}"""
+
+    # Only include optional distributions if they exist
+    if 'severity_dist' in metrics:
+        base_prompt += f"\n- Severity: {format_distribution(metrics.get('severity_dist', {}))}"
+    
+    if 'priority_dist' in metrics:
+        base_prompt += f"\n- Priority: {format_distribution(metrics.get('priority_dist', {}))}"
+
+    base_prompt += f"""
+
+RECENT ISSUES:
+{format_recent_issues(metrics.get('recent_issues', []))}
+
+USER QUESTION: {user_query}
+
+Provide a concise analysis with:
+1. Direct answer to the question
+2. Key insights from metrics
+3. Patterns identified
+4. Recommendations
+5. Risk assessment"""
+
+    return base_prompt
